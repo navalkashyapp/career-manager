@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Career-Ops AI Engine</title>
+    <link rel="stylesheet" href="./style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div class="glass-bg"></div>
+    <div class="glass-bg shape2"></div>
+    
+    <div class="app-container">
+      <header>
+        <h1>Career-Ops <span>AI Engine</span></h1>
+        <p>Powered by Firebase Vertex AI</p>
+      </header>
+
+      <main>
+        <aside class="sidebar glass-panel">
+          <h2>Modules</h2>
+          <ul id="module-list">
+            <li class="active" data-module="evaluateJob">A-F Job Evaluation</li>
+            <li data-module="tailorResume">ATS Resume Tailoring</li>
+            <li data-module="processPortal">Automated Portal Processing</li>
+            <li data-module="batchEvaluate">Batch Processing</li>
+            <li data-module="interviewPrep">Interview Prep & Debrief</li>
+            <li data-module="generateOutreach">Outreach Engine</li>
+          </ul>
+        </aside>
+
+        <section class="content-area glass-panel">
+          <div class="header-action">
+            <h2 id="current-module-title">A-F Job Evaluation</h2>
+            <button id="run-btn" class="primary-btn">
+              <span class="btn-text">Execute Module</span>
+              <div class="spinner hidden"></div>
+            </button>
+          </div>
+          
+          <div class="split-view">
+            <div class="input-section">
+              <h3>Input Parameters (JSON)</h3>
+              <textarea id="json-input" spellcheck="false">{
+  "userProfile": {
+    "targetRoles": ["Software Engineer"],
+    "desiredCompensation": "$120k+",
+    "coreSkills": ["JavaScript", "React", "Node.js"]
+  },
+  "jobDescription": "We are looking for a senior developer with 5+ years of React experience."
+}</textarea>
+            </div>
+            
+            <div class="output-section">
+              <h3>Structured Output (JSON)</h3>
+              <div class="output-wrapper">
+                <pre id="json-output">Ready to execute...</pre>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>

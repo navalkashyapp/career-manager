@@ -1,0 +1,39 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "edition": "STANDARD"
+  },
+  "auth": {
+    "providers": {
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Career Manager",
+        "supportEmail": "navalkashyapp@gmail.com",
+        "authorizedRedirectUris": [
+          "https://mycareer-manager.web.app",
+          "https://career-manager-8037a.firebaseapp.com",
+          "http://localhost"
+        ]
+      }
+    },
+    "authorizedDomains": [
+      "localhost",
+      "mycareer-manager.web.app",
+      "career-manager-8037a.firebaseapp.com"
+    ]
+  },
+  "hosting": {
+    "site": "mycareer-manager",
+    "public": "dist",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}
