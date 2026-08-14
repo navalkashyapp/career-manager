@@ -1,5 +1,6 @@
 import { GoogleGenAI, Schema } from '@google/genai';
 import { GEMINI_MODELS } from '../config/gemini';
+import { withExponentialBackoff } from '../lib/utils/withExponentialBackoff';
 
 export abstract class BaseAgent {
   protected ai: GoogleGenAI;
@@ -32,29 +33,16 @@ export abstract class BaseAgent {
     try {
       console.log(`\n================= AI REQUEST: ${this.constructor.name} =================\n`, fullPrompt, '\n====================================================================\n');
       
-      let response;
-      let retries = 3;
-      while (retries > 0) {
-        try {
-          response = await this.ai.models.generateContent({
-            model: this.model,
-            contents: fullPrompt,
-            config: {
-              responseMimeType: 'application/json',
-              responseSchema: schema
-            }
-          });
-          break; // Success
-        } catch (err: any) {
-          if (err.status === 429 && retries > 1) {
-            console.warn(`[BaseAgent] 429 Quota Exceeded. Retrying in 5 seconds... (${retries - 1} retries left)`);
-            await new Promise(resolve => setTimeout(resolve, 5000));
-            retries--;
-          } else {
-            throw err;
+      const response = await withExponentialBackoff(() => 
+        this.ai.models.generateContent({
+          model: this.model,
+          contents: fullPrompt,
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: schema
           }
-        }
-      }
+        })
+      );
       
       console.log(`\n================= AI RESPONSE: ${this.constructor.name} =================\n`, response?.text, '\n======================================================================\n');
       return JSON.parse(response?.text || '{}');

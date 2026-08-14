@@ -246,9 +246,29 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
     },
   });
 
+  async function withExponentialBackoff(operation, timeoutMs = 600000) {
+    const startTime = Date.now();
+    let delay = 5000;
+    while (true) {
+      try {
+        return await operation();
+      } catch (err) {
+        const is503 = err?.status === 503 || String(err?.message || '').includes('503') || String(err?.message || '').includes('high demand');
+        const is429 = err?.status === 429 || String(err?.message || '').includes('429');
+        if (!is503 && !is429) throw err;
+        if (Date.now() - startTime + delay > timeoutMs) {
+          throw new Error(`Timeout of ${timeoutMs}ms exceeded while retrying API. Last error: ${err.message}`);
+        }
+        process.stderr.write(`[API Error] ${err.status || err.message}. Retrying in ${delay / 1000} seconds...\n`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2;
+      }
+    }
+  }
+
   let evaluationText;
   try {
-    const result = await model.generateContent(`JOB DESCRIPTION TO EVALUATE:\n\n${jdText}`);
+    const result = await withExponentialBackoff(() => model.generateContent(`JOB DESCRIPTION TO EVALUATE:\n\n${jdText}`));
     evaluationText = result.response.text();
     const usage = {
       prompt_tokens: result.response.usageMetadata?.promptTokenCount ?? 0,

@@ -8,6 +8,7 @@ import { OutreachAgent } from '../agents/OutreachAgent';
 import { z } from 'zod';
 import { execFile } from 'child_process';
 import util from 'util';
+import { withExponentialBackoff } from '../utils/withExponentialBackoff';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
@@ -282,11 +283,13 @@ Return a JSON object with:
   "keySkills": ["skill 1", "skill 2", "skill 3"]
 }
 `;
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
-      contents: prompt,
-      config: { responseMimeType: 'application/json' }
-    });
+    const response = await withExponentialBackoff(() => 
+      ai.models.generateContent({
+        model: 'gemini-3.5-flash',
+        contents: prompt,
+        config: { responseMimeType: 'application/json' }
+      })
+    );
 
     const result = JSON.parse(response.text || '{}');
 
