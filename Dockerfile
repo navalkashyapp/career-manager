@@ -8,8 +8,8 @@ RUN apt-get update && \
     apt-get install -y sudo curl git && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Node.js (v20+ recommended)
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && \
+# Install Node.js (v22+ required for node:sqlite)
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && \
     sudo apt-get install -y nodejs
 
 # Install PM2 globally
