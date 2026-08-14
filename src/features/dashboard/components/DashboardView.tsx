@@ -57,15 +57,15 @@ export default function DashboardView() {
 
   if (loading) {
     return (
-      <div className="h-full flex flex-col p-8 overflow-y-auto space-y-8 animate-pulse">
-        <div className="flex items-center justify-between">
+      <div className="h-full flex flex-col p-4 md:p-8 overflow-y-auto space-y-8 animate-pulse">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-3">
             <div className="h-8 w-64 bg-white dark:bg-[#1E293B] rounded-lg"></div>
             <div className="h-4 w-48 bg-white dark:bg-[#1E293B] rounded-lg"></div>
           </div>
           <div className="h-10 w-32 bg-white dark:bg-[#1E293B] rounded-lg"></div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
           {[1, 2, 3, 4].map(i => <div key={i} className="h-32 bg-white dark:bg-[#1E293B] rounded-2xl"></div>)}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -87,11 +87,11 @@ export default function DashboardView() {
   const offers = applications.filter(a => a.stage === 'Offer Extended').length;
 
   return (
-    <div className="h-full flex flex-col p-8 overflow-y-auto">
-      <div className="flex items-center justify-between mb-8">
+    <div className="h-full flex flex-col p-4 md:p-8 overflow-y-auto">
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 md:mb-8 gap-4">
         <div>
-          <h1 className="text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">Welcome back, {profile.fullName.split(' ')[0]}</h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-1">Here's your TPM job search pipeline overview.</p>
+          <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">Welcome back, {profile.fullName.split(' ')[0]}</h1>
+          <p className="text-sm md:text-base text-slate-500 dark:text-slate-400 mt-1">Here's your TPM job search pipeline overview.</p>
         </div>
         <Button
           onClick={() => navigate('/applications')}
@@ -102,7 +102,7 @@ export default function DashboardView() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
         <MetricCard title="Total Active" value={totalActive} icon={Briefcase} trend="+12%" color="text-indigo-400" bg="bg-indigo-500/10" />
         <MetricCard title="In Interviews" value={interviewing} icon={Activity} trend="+2" color="text-amber-400" bg="bg-amber-500/10" />
         <MetricCard title="Offers Extended" value={offers} icon={CheckCircle2} trend="0" color="text-emerald-400" bg="bg-emerald-500/10" />
@@ -122,7 +122,7 @@ export default function DashboardView() {
               {nudges.map((nudge, i) => (
                 <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-white dark:bg-[#0F172A]/50 rounded-xl border border-slate-200 dark:border-[#334155]">
                   <div>
-                    <h4 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                    <h4 className="font-semibold text-slate-900 dark:text-white flex flex-wrap items-center gap-2">
                       {nudge.app.companyName} - {nudge.app.jobTitle}
                       {nudge.urgency === 'high' && (
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400 uppercase tracking-wide">
@@ -152,7 +152,7 @@ export default function DashboardView() {
       )}
 
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
         <Card className="lg:col-span-2 bg-white/50 dark:bg-[#1E293B]/50 backdrop-blur-md border border-slate-200 dark:border-[#334155]">
           <CardHeader>
             <CardTitle className="text-lg font-medium">Activity Pipeline</CardTitle>

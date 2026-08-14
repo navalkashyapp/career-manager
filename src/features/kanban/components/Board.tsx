@@ -75,8 +75,8 @@ export default function Board() {
   }
 
   return (
-    <div className="h-full flex flex-col p-8">
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between mb-8 gap-4">
+    <div className="h-full flex flex-col p-4 md:p-8">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between mb-6 md:mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">Applications</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-1">Pipeline & Progress Tracking</p>
@@ -141,8 +141,8 @@ export default function Board() {
 
       {view === 'kanban' ? (
         <DndContext collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
-          <div className="flex-1 overflow-x-auto pb-4">
-            <div className="flex space-x-6 h-full items-start w-max">
+          <div className="flex-1 overflow-x-auto pb-4 snap-x snap-mandatory">
+            <div className="flex space-x-4 md:space-x-6 h-full items-start w-max">
               {STAGES.filter(stage => statusFilter === 'All' || stage === statusFilter).map(stage => (
                 <Column 
                   key={stage} 

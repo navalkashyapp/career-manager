@@ -14,8 +14,9 @@ export class JobScraperService {
     try {
       const page = await browser.newPage();
       
-      // Navigate and wait for network idle to ensure dynamic content loads
-      await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+      // Navigate and wait for domcontentloaded instead of networkidle, as LinkedIn keeps connections open
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.waitForTimeout(2000); // Wait 2s for dynamic content to render
 
       // Remove irrelevant elements that might pollute the JD text
       await page.evaluate(() => {

@@ -178,11 +178,11 @@ export default function Inbox() {
   }
 
   return (
-    <div className="h-full flex flex-col p-8 overflow-hidden">
-      <div className="flex items-center justify-between mb-8 flex-shrink-0">
+    <div className="h-full flex flex-col p-4 md:p-8 overflow-y-auto md:overflow-hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 md:mb-8 gap-4 flex-shrink-0">
         <div>
-          <h1 className="text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">Recruiter Hub</h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-1">Manage communications and AI outreach</p>
+          <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">Recruiter Hub</h1>
+          <p className="text-sm md:text-base text-slate-500 dark:text-slate-400 mt-1">Manage communications and AI outreach</p>
         </div>
         <Button 
           variant="outline"
@@ -194,7 +194,7 @@ export default function Inbox() {
         </Button>
       </div>
 
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-8 min-h-0">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 min-h-0 pb-6 md:pb-0">
         <div className="flex flex-col bg-white/50 dark:bg-[#1E293B]/50 border border-slate-200 dark:border-[#334155] rounded-2xl overflow-hidden">
           <div className="p-4 border-b border-slate-200 dark:border-[#334155] bg-slate-100/50 dark:bg-[#0F172A]/50">
             <h3 className="font-medium text-slate-900 dark:text-white flex items-center space-x-2">
@@ -267,7 +267,7 @@ export default function Inbox() {
 
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Message Type</label>
-              <div className="flex bg-slate-100 dark:bg-[#0F172A] p-1 rounded-lg border border-slate-200 dark:border-[#334155]">
+              <div className="flex flex-col sm:flex-row bg-slate-100 dark:bg-[#0F172A] p-1 rounded-lg border border-slate-200 dark:border-[#334155] gap-1 sm:gap-0">
                 {(['REFERRAL', 'FOLLOWUP', 'THANKYOU'] as const).map((type) => (
                   <Button
                     key={type}
@@ -293,7 +293,7 @@ export default function Inbox() {
             </Button>
 
             <div className="pt-4 border-t border-slate-200 dark:border-[#334155] space-y-4">
-              <div className="flex items-center space-x-3">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                 <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider flex-shrink-0">
                   <FileText size={14} className="inline mr-1" />
                   Quick Templates
@@ -307,7 +307,7 @@ export default function Inbox() {
                     }
                     e.target.value = ''; // reset after selection
                   }}
-                  className="flex-1 bg-slate-100 dark:bg-[#0F172A] border border-slate-200 dark:border-[#334155] rounded-lg px-3 py-1.5 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="w-full sm:flex-1 bg-slate-100 dark:bg-[#0F172A] border border-slate-200 dark:border-[#334155] rounded-lg px-3 py-2 sm:py-1.5 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 >
                   <option value="">Select a template to autofill...</option>
                   {EMAIL_TEMPLATES.map(tpl => (

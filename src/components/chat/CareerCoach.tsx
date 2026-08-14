@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MessageSquare, X, Send, Loader2, Maximize2, Minimize2, Bot } from 'lucide-react';
 import { useData } from '../../hooks/useData';
+import { cn } from '../../lib/utils';
 
 interface Message {
   id: string;
@@ -118,9 +119,12 @@ export default function CareerCoach() {
             initial={{ opacity: 0, y: 20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            className={`fixed bottom-6 right-6 z-50 bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-[#334155] rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all duration-300 ${
-              isExpanded ? 'w-[450px] h-[600px]' : 'w-[350px] h-[500px]'
-            }`}
+            className={cn(
+              "fixed z-50 bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-[#334155] shadow-2xl flex flex-col overflow-hidden transition-all duration-300",
+              "inset-0 w-full h-[100dvh] rounded-none", // Mobile styles
+              "md:inset-auto md:bottom-6 md:right-6 md:rounded-2xl", // Desktop styles
+              isExpanded ? 'md:w-[450px] md:h-[600px]' : 'md:w-[350px] md:h-[500px]'
+            )}
           >
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-[#334155] bg-slate-50 dark:bg-[#0F172A]">

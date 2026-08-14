@@ -135,10 +135,10 @@ export default function EvaluateView() {
   };
 
   return (
-    <div className="h-full flex flex-col p-8 overflow-y-auto">
-      <div className="flex items-center justify-between mb-8">
+    <div className="h-full flex flex-col p-4 md:p-8 overflow-y-auto">
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 md:mb-8 gap-4">
         <div>
-          <h1 className="text-3xl font-semibold text-slate-900 dark:text-white tracking-tight flex items-center gap-3">
+          <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 dark:text-white tracking-tight flex items-center gap-3">
             <Search className="w-8 h-8 text-indigo-500" />
             Job Evaluator
           </h1>
@@ -152,7 +152,7 @@ export default function EvaluateView() {
           <CardDescription>Paste a Job URL or raw text to get started.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex space-x-4 mb-4">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4">
             <Input
               type="text"
               placeholder="Paste Job Description URL or Text here..."
@@ -163,7 +163,7 @@ export default function EvaluateView() {
             <Button
               onClick={handleEvaluate}
               disabled={evalLoading || !evalInput.trim()}
-              className="px-6"
+              className="w-full sm:w-auto px-6"
             >
               {evalLoading ? 'Evaluating...' : 'Evaluate'}
             </Button>
@@ -191,23 +191,27 @@ export default function EvaluateView() {
 
           {evalResult && (
             <div className="bg-[#0F172A] p-4 rounded-xl border border-[#334155] text-slate-200 animate-in fade-in slide-in-from-bottom-4">
-              <div className="flex justify-between items-center mb-4">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 gap-4">
                 <div>
-                  <h3 className="font-semibold text-xl">{evalResult.role}</h3>
-                  <p className="text-slate-400">{evalResult.company}</p>
+                  <h3 className="font-semibold text-xl">{evalResult?.role || 'Unknown'}</h3>
+                  <p className="text-slate-400">{evalResult?.company || 'Unknown'}</p>
                 </div>
-                <div className="text-right">
+                <div className="text-left sm:text-right bg-slate-800/50 sm:bg-transparent p-3 sm:p-0 rounded-lg">
                   <span className="text-sm text-slate-400 block mb-1">Match Score</span>
-                  <span className="text-3xl font-bold text-indigo-400">{evalResult.score} / 5.0</span>
+                  <span className="text-3xl font-bold text-indigo-400">{evalResult?.score || 'N/A'} <span className="text-lg text-slate-500">/ 5.0</span></span>
                 </div>
               </div>
 
-              <div className="mb-4 bg-slate-800/50 p-3 rounded-lg border border-slate-700">
-                <span className="font-semibold text-slate-200">Archetype: </span>
-                <span className="text-slate-400">{evalResult.archetype}</span>
-                <span className="mx-3 text-slate-600">|</span>
-                <span className="font-semibold text-slate-200">Legitimacy: </span>
-                <span className="text-slate-400">{evalResult.legitimacy}</span>
+              <div className="mb-4 bg-slate-800/50 p-3 rounded-lg border border-slate-700 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-0">
+                <div className="flex items-center">
+                  <span className="font-semibold text-slate-200 mr-2">Archetype: </span>
+                  <span className="text-slate-400">{evalResult?.archetype || 'N/A'}</span>
+                </div>
+                <span className="hidden sm:inline mx-3 text-slate-600">|</span>
+                <div className="flex items-center">
+                  <span className="font-semibold text-slate-200 mr-2">Legitimacy: </span>
+                  <span className="text-slate-400">{evalResult?.legitimacy || 'N/A'}</span>
+                </div>
               </div>
 
               {evalResult.evaluationText && (
@@ -237,7 +241,7 @@ export default function EvaluateView() {
                         blockquote: ({ node, ...props }) => <blockquote className="border-l-2 border-indigo-500 pl-4 py-1 my-3 bg-indigo-500/5 text-slate-300 italic rounded-r-lg" {...props} />
                       }}
                     >
-                      {evalResult.evaluationText}
+                      {evalResult?.evaluationText || evalResult?.report || ''}
                     </ReactMarkdown>
                   </div>
                 </div>
@@ -283,19 +287,19 @@ export default function EvaluateView() {
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-4">
                   <div>
                     <h3 className="font-semibold text-lg text-slate-900 dark:text-white">
-                      {entry.result.role || 'Unknown Title'}
+                      {entry.result?.role || 'Unknown Title'}
                     </h3>
                     <p className="text-slate-600 dark:text-slate-400">
-                      {entry.result.company || 'Unknown Company'}
+                      {entry.result?.company || 'Unknown Company'}
                     </p>
                     <p className="text-xs text-slate-500 mt-2 flex items-center gap-1">
                       <Clock className="w-3 h-3" />
-                      {formatDistanceToNow(entry.timestamp)} ago
+                      {entry.timestamp && !isNaN(new Date(entry.timestamp).getTime()) ? formatDistanceToNow(new Date(entry.timestamp)) : 'a while'} ago
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-3 py-1 rounded-full text-sm font-semibold flex items-center gap-1 border border-indigo-100 dark:border-indigo-500/20">
-                      Match: {entry.result.score}
+                      Match: {entry.result?.score || 'N/A'}
                     </div>
                     <Button
                       variant="ghost"
@@ -309,8 +313,8 @@ export default function EvaluateView() {
                 </div>
 
                 <div className="text-sm text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-[#0F172A] p-4 rounded-lg border border-slate-100 dark:border-[#334155]">
-                  <p className="mb-2"><span className="font-semibold text-slate-900 dark:text-white">Archetype:</span> {entry.result.archetype}</p>
-                  <p><span className="font-semibold text-slate-900 dark:text-white">Legitimacy:</span> {entry.result.legitimacy}</p>
+                  <p className="mb-2"><span className="font-semibold text-slate-900 dark:text-white">Archetype:</span> {entry.result?.archetype || 'N/A'}</p>
+                  <p><span className="font-semibold text-slate-900 dark:text-white">Legitimacy:</span> {entry.result?.legitimacy || 'N/A'}</p>
                 </div>
 
                 <div className="mt-4 flex justify-end gap-2">

@@ -17,8 +17,8 @@ const __dirname = dirname(__filename);
 const execFileAsync = util.promisify(execFile);
 
 export const careerOpsRouter = express.Router();
-const dataParser = new DataParserService(path.resolve(__dirname, '../../../career-ops'));
-const careerOpsPath = path.resolve(__dirname, '../../../career-ops');
+const dataParser = new DataParserService(path.resolve(process.cwd(), 'career-ops'));
+const careerOpsPath = path.resolve(process.cwd(), 'career-ops');
 
 // ---------------------------------------------------------------------------
 // REST Endpoint: Tracker Query

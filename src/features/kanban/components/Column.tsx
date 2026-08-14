@@ -14,7 +14,7 @@ export const Column: React.FC<ColumnProps> = ({ stage, apps }) => {
   const { setNodeRef } = useDroppable({ id: stage });
 
   return (
-    <div className="w-80 flex-shrink-0 flex flex-col h-full max-h-full">
+    <div className="w-[85vw] sm:w-80 shrink-0 flex flex-col h-full max-h-full snap-center">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-medium text-slate-600 dark:text-slate-300">{stage}</h3>
         <Badge variant="outline">
