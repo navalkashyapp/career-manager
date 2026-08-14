@@ -116,7 +116,7 @@ export default function EvaluateView() {
         jobTitle: result.role || 'Unknown Title',
         companyName: result.company || 'Unknown Company',
         location: result.location || '',
-        jobUrl: isUrl ? evalInput.trim() : undefined,
+        jobUrl: isUrl ? evalInput.trim() : '',
         salaryRange: '',
         targetLevel: '',
         contacts: [],

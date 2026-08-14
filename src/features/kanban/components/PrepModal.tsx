@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Sparkles, X, RefreshCw, BrainCircuit, MessageSquare } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { useKanban } from '../hooks/useKanban';
+import { useMutation } from '@tanstack/react-query';
+import { prepInterview } from '../api/prepInterview';
 import type { JobApplication } from '../../../types';
 
 interface PrepModalProps {
@@ -10,7 +12,10 @@ interface PrepModalProps {
 }
 
 export const PrepModal: React.FC<PrepModalProps> = ({ app, onClose }) => {
-  const { generatePrep } = useKanban();
+  const generatePrepMutation = useMutation({
+    mutationFn: prepInterview
+  });
+  const generatePrep = generatePrepMutation.mutateAsync;
   const [prepData, setPrepData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
