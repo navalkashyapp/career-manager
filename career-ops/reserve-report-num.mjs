@@ -340,6 +340,7 @@ async function runCli() {
 
 function isDirectInvocation() {
   if (!process.argv[1]) return false;
+  if (!process.argv[1].endsWith('reserve-report-num.mjs')) return false;
   try {
     return realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url));
   } catch {

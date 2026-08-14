@@ -557,7 +557,7 @@ async function main() {
   await fn(args);
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
+if (import.meta.url === pathToFileURL(process.argv[1] || '').href && process.argv[1]?.endsWith('tracker.mjs')) {
   main().catch(err => {
     console.error('Fatal:', err.message);
     process.exit(1);
