@@ -78,7 +78,8 @@ export async function evaluateJob(options = {}) {
     jdText = '',
     modelName = process.env.GEMINI_MODEL || 'gemini-3.5-flash',
     saveReport = true,
-    apiKey = process.env.GEMINI_API_KEY
+    apiKey = process.env.GEMINI_API_KEY,
+    onRetry
   } = options;
 
   if (!jdText) {
@@ -249,6 +250,7 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
   async function withExponentialBackoff(operation, timeoutMs = 600000) {
     const startTime = Date.now();
     let delay = 5000;
+    let attempt = 1;
     while (true) {
       try {
         return await operation();
@@ -256,12 +258,20 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
         const is503 = err?.status === 503 || String(err?.message || '').includes('503') || String(err?.message || '').includes('high demand');
         const is429 = err?.status === 429 || String(err?.message || '').includes('429');
         if (!is503 && !is429) throw err;
-        if (Date.now() - startTime + delay > timeoutMs) {
+        
+        const timeElapsed = Date.now() - startTime;
+        if (timeElapsed + delay > timeoutMs) {
           throw new Error(`Timeout of ${timeoutMs}ms exceeded while retrying API. Last error: ${err.message}`);
         }
         process.stderr.write(`[API Error] ${err.status || err.message}. Retrying in ${delay / 1000} seconds...\n`);
+        
+        if (onRetry) {
+          onRetry(attempt, delay, timeElapsed, timeoutMs);
+        }
+        
         await new Promise(resolve => setTimeout(resolve, delay));
         delay *= 2;
+        attempt++;
       }
     }
   }

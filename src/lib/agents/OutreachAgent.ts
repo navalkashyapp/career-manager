@@ -9,7 +9,7 @@ export class OutreachAgent {
     this.ai = ai;
   }
 
-  public async draft(payload: any): Promise<any> {
+  public async draft(payload: any, onRetry?: (attempt: number, delayMs: number, timeElapsedMs: number, maxTimeoutMs: number) => void): Promise<any> {
     const { jdText, profileData, messageType } = payload;
     const prompt = `
 You are an expert executive career strategist. 
@@ -34,7 +34,9 @@ Return the result as a JSON object with this structure:
         config: {
           responseMimeType: 'application/json',
         }
-      })
+      }),
+      600000,
+      onRetry
     );
     
     return JSON.parse(response.text || '{}');

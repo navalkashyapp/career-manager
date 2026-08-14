@@ -124,7 +124,10 @@ careerOpsRouter.post('/outreach-stream', async (req, res) => {
 
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const agent = new OutreachAgent(ai);
-    const result = await agent.draft(payload);
+    const result = await agent.draft(payload, (attempt, delayMs, timeElapsedMs, maxTimeoutMs) => {
+      const remainingSeconds = Math.round((maxTimeoutMs - timeElapsedMs) / 1000);
+      sendEvent('progress', { phase: `API Overloaded. Retrying attempt ${attempt}... (${remainingSeconds}s remaining)`, percentage: 50 });
+    });
 
     sendEvent('progress', { phase: 'Complete', percentage: 100 });
     sendEvent('result', result);
@@ -172,7 +175,15 @@ careerOpsRouter.post('/evaluate-stream', async (req, res) => {
     }, 2000);
 
     // Call the newly exported `evaluateJob` function
-    const result = await evaluateJob({ jdText, modelName, saveReport: true });
+    const result = await evaluateJob({ 
+      jdText, 
+      modelName, 
+      saveReport: true,
+      onRetry: (attempt, delayMs, timeElapsedMs, maxTimeoutMs) => {
+        const remainingSeconds = Math.round((maxTimeoutMs - timeElapsedMs) / 1000);
+        sendEvent('progress', { phase: `API Overloaded. Retrying attempt ${attempt}... (${remainingSeconds}s remaining)`, percentage: 50 });
+      }
+    });
 
     clearInterval(interval);
     sendEvent('progress', { phase: 'Complete', percentage: 100 });
@@ -224,7 +235,15 @@ careerOpsRouter.post('/evaluate-url-stream', async (req, res) => {
     }, 2000);
 
     // Call evaluateJob
-    const result = await evaluateJob({ jdText: scrapedText, modelName, saveReport: true });
+    const result = await evaluateJob({ 
+      jdText: scrapedText, 
+      modelName, 
+      saveReport: true,
+      onRetry: (attempt, delayMs, timeElapsedMs, maxTimeoutMs) => {
+        const remainingSeconds = Math.round((maxTimeoutMs - timeElapsedMs) / 1000);
+        sendEvent('progress', { phase: `API Overloaded. Retrying attempt ${attempt}... (${remainingSeconds}s remaining)`, percentage: 50 });
+      }
+    });
 
     clearInterval(interval);
 
@@ -288,7 +307,12 @@ Return a JSON object with:
         model: 'gemini-3.5-flash',
         contents: prompt,
         config: { responseMimeType: 'application/json' }
-      })
+      }),
+      600000,
+      (attempt, delayMs, timeElapsedMs, maxTimeoutMs) => {
+        const remainingSeconds = Math.round((maxTimeoutMs - timeElapsedMs) / 1000);
+        sendEvent('progress', { phase: `API Overloaded. Retrying attempt ${attempt}... (${remainingSeconds}s remaining)`, percentage: 50 });
+      }
     );
 
     const result = JSON.parse(response.text || '{}');
