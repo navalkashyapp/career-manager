@@ -239,11 +239,14 @@ careerOpsRouter.post('/evaluate-url-stream', async (req, res) => {
       jdText: scrapedText, 
       modelName, 
       saveReport: true,
-      onRetry: (attempt, delayMs, timeElapsedMs, maxTimeoutMs) => {
+      onRetry: (attempt: number, delayMs: number, timeElapsedMs: number, maxTimeoutMs: number) => {
         const remainingSeconds = Math.round((maxTimeoutMs - timeElapsedMs) / 1000);
         sendEvent('progress', { phase: `API Overloaded. Retrying attempt ${attempt}... (${remainingSeconds}s remaining)`, percentage: 50 });
       }
     });
+
+    // Attach the scraped text so the frontend can save it to Firestore
+    result.rawJobDescription = scrapedText;
 
     clearInterval(interval);
 

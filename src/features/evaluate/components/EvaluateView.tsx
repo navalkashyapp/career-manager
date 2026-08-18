@@ -120,7 +120,7 @@ export default function EvaluateView() {
         salaryRange: '',
         targetLevel: '',
         contacts: [],
-        rawJobDescription: '',
+        rawJobDescription: result.rawJobDescription || (!isUrl ? evalInput.trim() : ''),
         matchScore: result.score,
         stage: 'Targeting',
         notes: result.evaluationText || '',
