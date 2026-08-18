@@ -167,6 +167,7 @@ export async function evaluateJob(options = {}) {
 
   const sharedContext = readFile(PATHS.shared, 'modes/_shared.md');
   const ofertaLogic = readFile(PATHS.oferta, 'modes/oferta.md');
+  const profileContent = readFile(PATHS.profile, 'modes/_profile.md');
   let dynamicProfileYml = readFile(PATHS.profileYml, 'config/profile.yml');
   let dynamicCvContent = readFile(PATHS.cv, 'cv.md');
 
