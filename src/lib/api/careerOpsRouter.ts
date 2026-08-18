@@ -145,7 +145,8 @@ careerOpsRouter.post('/outreach-stream', async (req, res) => {
 const EvaluateSchema = z.object({
   jdText: z.string().optional(),
   url: z.string().url().optional(),
-  modelName: z.string().optional()
+  modelName: z.string().optional(),
+  profileData: z.any().optional()
 });
 
 careerOpsRouter.post('/evaluate-stream', async (req, res) => {
@@ -160,7 +161,7 @@ careerOpsRouter.post('/evaluate-stream', async (req, res) => {
   };
 
   try {
-    const { jdText, modelName } = EvaluateSchema.parse(req.body);
+    const { jdText, modelName, profileData } = EvaluateSchema.parse(req.body);
 
     sendEvent('progress', { phase: 'Initializing evaluation...', percentage: 10 });
 
@@ -177,7 +178,8 @@ careerOpsRouter.post('/evaluate-stream', async (req, res) => {
     // Call the newly exported `evaluateJob` function
     const result = await evaluateJob({ 
       jdText, 
-      modelName, 
+      modelName,
+      profileData, 
       saveReport: true,
       onRetry: (attempt, delayMs, timeElapsedMs, maxTimeoutMs) => {
         const remainingSeconds = Math.round((maxTimeoutMs - timeElapsedMs) / 1000);
@@ -208,7 +210,7 @@ careerOpsRouter.post('/evaluate-url-stream', async (req, res) => {
   };
 
   try {
-    const { url, modelName } = EvaluateSchema.parse(req.body);
+    const { url, modelName, profileData } = EvaluateSchema.parse(req.body);
     if (!url) {
       throw new Error("URL is required for this endpoint");
     }
@@ -237,7 +239,8 @@ careerOpsRouter.post('/evaluate-url-stream', async (req, res) => {
     // Call evaluateJob
     const result = await evaluateJob({ 
       jdText: scrapedText, 
-      modelName, 
+      modelName,
+      profileData, 
       saveReport: true,
       onRetry: (attempt: number, delayMs: number, timeElapsedMs: number, maxTimeoutMs: number) => {
         const remainingSeconds = Math.round((maxTimeoutMs - timeElapsedMs) / 1000);

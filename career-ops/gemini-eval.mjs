@@ -79,7 +79,8 @@ export async function evaluateJob(options = {}) {
     modelName = process.env.GEMINI_MODEL || 'gemini-3.5-flash',
     saveReport = true,
     apiKey = process.env.GEMINI_API_KEY,
-    onRetry
+    onRetry,
+    profileData
   } = options;
 
   if (!jdText) {
@@ -166,10 +167,46 @@ export async function evaluateJob(options = {}) {
 
   const sharedContext = readFile(PATHS.shared, 'modes/_shared.md');
   const ofertaLogic = readFile(PATHS.oferta, 'modes/oferta.md');
-  const cvContent = readFile(PATHS.cv, 'cv.md');
-  const profileContent = readFile(PATHS.profile, 'modes/_profile.md');
-  const profileYml = readFile(PATHS.profileYml, 'config/profile.yml');
-  const languageInstruction = outputLanguageInstruction(parseOutputLanguage(profileYml));
+  let dynamicProfileYml = readFile(PATHS.profileYml, 'config/profile.yml');
+  let dynamicCvContent = readFile(PATHS.cv, 'cv.md');
+
+  if (profileData) {
+    console.log('📝  Using dynamically provided profile data from frontend.');
+    
+    // Format profileData to YAML-like format for targets
+    dynamicProfileYml = `
+target_title: "${profileData.targetTitle || ''}"
+location: "${profileData.location || ''}"
+preferred_compensation: "${profileData.preferredCompensation || ''}"
+core_skills:
+${Object.entries(profileData.coreSkills || {}).map(([category, skills]) => `  ${category}:\n${(skills || []).map(s => `    - ${s}`).join('\n')}`).join('\n')}
+    `.trim();
+
+    // Format resume data into markdown
+    dynamicCvContent = `
+# ${profileData.fullName || 'Candidate'}
+
+## Experience
+${(profileData.careerHistory || []).map(job => `
+### ${job.title} at ${job.company} (${job.startDate || 'Unknown'} - ${job.endDate || 'Present'})
+${job.description ? `${job.description}\n` : ''}
+${(job.highlights || []).map(h => `- ${h}`).join('\n')}
+`).join('\n')}
+
+## Education
+${(profileData.education || []).map(edu => `
+- ${edu.degree} in ${edu.field} from ${edu.institution} (${edu.graduationYear})
+`).join('\n')}
+
+## Projects
+${(profileData.projects || []).map(p => `
+- **${p.name}**: ${p.description}
+  Technologies: ${(p.technologies || []).join(', ')}
+`).join('\n')}
+    `.trim();
+  }
+
+  const languageInstruction = outputLanguageInstruction(parseOutputLanguage(dynamicProfileYml));
 
   // ---------------------------------------------------------------------------
   // Build the system prompt (mirrors the Claude skill router logic)
@@ -192,12 +229,12 @@ ${ofertaLogic}
 ═══════════════════════════════════════════════════════
 CANDIDATE RESUME (cv.md)
 ═══════════════════════════════════════════════════════
-${cvContent}
+${dynamicCvContent}
 
 ═══════════════════════════════════════════════════════
 CANDIDATE PROFILE & TARGETS (config/profile.yml)
 ═══════════════════════════════════════════════════════
-${profileYml}
+${dynamicProfileYml}
 
 ═══════════════════════════════════════════════════════
 USER ARCHETYPES & NARRATIVE (_profile.md)
@@ -485,4 +522,3 @@ if (import.meta.url === `file://${process.argv[1]}` && process.argv[1].endsWith(
     process.exit(1);
   });
 }
-

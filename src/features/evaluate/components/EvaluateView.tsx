@@ -79,10 +79,10 @@ export default function EvaluateView() {
       let data;
       if (isUrl) {
         console.log('[EvaluateView] Invoking evaluateJobUrl hook...');
-        data = await evaluateJobUrl(evalInput.trim(), onProgress);
+        data = await evaluateJobUrl(evalInput.trim(), profile, onProgress);
       } else {
         console.log('[EvaluateView] Invoking evaluateJob hook...');
-        data = await evaluateJob(evalInput.trim(), onProgress);
+        data = await evaluateJob(evalInput.trim(), profile, onProgress);
       }
 
       console.log('[EvaluateView] Evaluation complete. Data received:', data);

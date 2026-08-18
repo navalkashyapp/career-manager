@@ -12,14 +12,14 @@ export function useCareerOps() {
     }
   });
 
-  const evaluateJob = async (jdText: string, onProgress?: (data: any) => void) => {
+  const evaluateJob = async (jdText: string, profileData: any, onProgress?: (data: any) => void) => {
     console.log('[useCareerOps] Opening SSE stream for evaluateJob API...');
     return new Promise((resolve, reject) => {
       const controller = new AbortController();
       fetch('/api/career-ops/evaluate-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jdText }),
+        body: JSON.stringify({ jdText, profileData }),
         signal: controller.signal
       }).then(async (response) => {
         console.log('[useCareerOps] /evaluate-stream Connection established.');
@@ -67,14 +67,14 @@ export function useCareerOps() {
     });
   };
 
-  const evaluateJobUrl = async (url: string, onProgress?: (data: any) => void) => {
+  const evaluateJobUrl = async (url: string, profileData: any, onProgress?: (data: any) => void) => {
     console.log('[useCareerOps] Opening SSE stream for evaluateJobUrl API...');
     return new Promise((resolve, reject) => {
       const controller = new AbortController();
       fetch('/api/career-ops/evaluate-url-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, profileData }),
         signal: controller.signal
       }).then(async (response) => {
         console.log('[useCareerOps] /evaluate-url-stream Connection established.');
