@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { UserProfile, JobApplication } from '../types';
+import { UserProfile, JobApplication, JobSearchHistoryEntry } from '../types';
 import { auth, db } from '../store/firebase';
 import { doc, collection, onSnapshot, setDoc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { TaskPollingService } from '../services/TaskPollingService';
@@ -34,6 +34,10 @@ interface DataContextType {
   addApplication: (app: JobApplication) => Promise<void>;
   updateApplication: (id: string, updates: Partial<JobApplication>) => Promise<void>;
   deleteApplication: (id: string) => Promise<void>;
+  searchHistory: JobSearchHistoryEntry[];
+  addSearchHistory: (entry: JobSearchHistoryEntry) => Promise<void>;
+  deleteSearchHistory: (id: string) => Promise<void>;
+  clearSearchHistory: () => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | null>(null);
@@ -41,6 +45,7 @@ const DataContext = createContext<DataContextType | null>(null);
 export const DataProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [applications, setApplications] = useState<JobApplication[]>([]);
+  const [searchHistory, setSearchHistory] = useState<JobSearchHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const pollerRef = useRef<TaskPollingService | null>(null);
@@ -50,6 +55,7 @@ export const DataProvider: React.FC<{children: React.ReactNode}> = ({ children }
       if (!user) {
         setProfile(null);
         setApplications([]);
+        setSearchHistory([]);
         setLoading(false);
         if (pollerRef.current) {
           pollerRef.current.stopPolling();
@@ -94,9 +100,23 @@ export const DataProvider: React.FC<{children: React.ReactNode}> = ({ children }
         setError(err.message || 'Failed to load applications');
       });
 
+      const historyRef = collection(db, 'users', userId, 'jobsearchhistory');
+      const unsubHistory = onSnapshot(historyRef, (querySnapshot) => {
+        const h: JobSearchHistoryEntry[] = [];
+        querySnapshot.forEach((doc) => {
+          h.push(doc.data() as JobSearchHistoryEntry);
+        });
+        // Sort history by timestamp descending
+        h.sort((a, b) => b.timestamp - a.timestamp);
+        setSearchHistory(h);
+      }, (err) => {
+        console.error("Search history snapshot error:", err);
+      });
+
       return () => {
         unsubProfile();
         unsubApps();
+        unsubHistory();
         if (pollerRef.current) {
           pollerRef.current.stopPolling();
           pollerRef.current = null;
@@ -173,16 +193,57 @@ export const DataProvider: React.FC<{children: React.ReactNode}> = ({ children }
     }
   };
 
+  const addSearchHistory = async (entry: JobSearchHistoryEntry) => {
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error("Not authenticated");
+      const ref = doc(db, 'users', user.uid, 'jobsearchhistory', entry.id);
+      await setDoc(ref, entry);
+    } catch (err: any) {
+      console.error("Error adding search history:", err);
+    }
+  };
+
+  const deleteSearchHistory = async (id: string) => {
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error("Not authenticated");
+      const ref = doc(db, 'users', user.uid, 'jobsearchhistory', id);
+      await deleteDoc(ref);
+    } catch (err: any) {
+      console.error("Error deleting search history:", err);
+    }
+  };
+
+  const clearSearchHistory = async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error("Not authenticated");
+      const batch = writeBatch(db);
+      searchHistory.forEach(entry => {
+        const ref = doc(db, 'users', user.uid, 'jobsearchhistory', entry.id);
+        batch.delete(ref);
+      });
+      await batch.commit();
+    } catch (err: any) {
+      console.error("Error clearing search history:", err);
+    }
+  };
+
   return (
     <DataContext.Provider value={{
       profile: profile || defaultProfile,
       applications,
+      searchHistory,
       loading,
       error,
       updateProfile,
       addApplication,
       updateApplication,
-      deleteApplication
+      deleteApplication,
+      addSearchHistory,
+      deleteSearchHistory,
+      clearSearchHistory
     }}>
       {children}
     </DataContext.Provider>

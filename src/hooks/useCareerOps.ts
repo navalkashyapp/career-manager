@@ -27,6 +27,7 @@ export function useCareerOps() {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
+        let currentEvent = 'message';
 
         while (true) {
           const { done, value } = await reader.read();
@@ -34,31 +35,27 @@ export function useCareerOps() {
           
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\n');
-          buffer = lines.pop() || ''; // Keep the last incomplete line in buffer
+          buffer = lines.pop() || '';
 
-          for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
-            if (line.startsWith('data: ')) {
+          for (const line of lines) {
+            if (line.trim() === '') {
+              currentEvent = 'message';
+            } else if (line.startsWith('event: ')) {
+              currentEvent = line.replace('event: ', '').trim();
+            } else if (line.startsWith('data: ')) {
               const dataStr = line.replace('data: ', '').trim();
               if (dataStr) {
                 try {
                   const data = JSON.parse(dataStr);
-                  // Look at the previous line for the event type
-                  const eventTypeLine = lines[i-1];
-                  if (eventTypeLine && eventTypeLine.startsWith('event: ')) {
-                    const eventType = eventTypeLine.replace('event: ', '').trim();
-                    console.log(`[useCareerOps.evaluateJob] SSE Event Received: ${eventType}`, data);
-                    if (eventType === 'progress' && onProgress) {
-                      onProgress(data);
-                    } else if (eventType === 'result') {
-                      resolve(data);
-                    } else if (eventType === 'error') {
-                      reject(new Error(data.message));
-                    }
+                  console.log(`[useCareerOps.evaluateJob] SSE Event Received: ${currentEvent}`, data);
+                  if (currentEvent === 'progress' && onProgress) {
+                    onProgress(data);
+                  } else if (currentEvent === 'result') {
+                    resolve(data);
+                  } else if (currentEvent === 'error') {
+                    reject(new Error(data.message));
                   }
-                } catch (e) {
-                  // Ignore parse errors for incomplete chunks
-                }
+                } catch (e) {}
               }
             }
           }
@@ -82,6 +79,7 @@ export function useCareerOps() {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
+        let currentEvent = 'message';
 
         while (true) {
           const { done, value } = await reader.read();
@@ -91,24 +89,23 @@ export function useCareerOps() {
           const lines = buffer.split('\n');
           buffer = lines.pop() || '';
 
-          for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
-            if (line.startsWith('data: ')) {
+          for (const line of lines) {
+            if (line.trim() === '') {
+              currentEvent = 'message';
+            } else if (line.startsWith('event: ')) {
+              currentEvent = line.replace('event: ', '').trim();
+            } else if (line.startsWith('data: ')) {
               const dataStr = line.replace('data: ', '').trim();
               if (dataStr) {
                 try {
                   const data = JSON.parse(dataStr);
-                  const eventTypeLine = lines[i-1];
-                  if (eventTypeLine && eventTypeLine.startsWith('event: ')) {
-                    const eventType = eventTypeLine.replace('event: ', '').trim();
-                    console.log(`[useCareerOps.evaluateJobUrl] SSE Event Received: ${eventType}`, data);
-                    if (eventType === 'progress' && onProgress) {
-                      onProgress(data);
-                    } else if (eventType === 'result') {
-                      resolve(data);
-                    } else if (eventType === 'error') {
-                      reject(new Error(data.message));
-                    }
+                  console.log(`[useCareerOps.evaluateJobUrl] SSE Event Received: ${currentEvent}`, data);
+                  if (currentEvent === 'progress' && onProgress) {
+                    onProgress(data);
+                  } else if (currentEvent === 'result') {
+                    resolve(data);
+                  } else if (currentEvent === 'error') {
+                    reject(new Error(data.message));
                   }
                 } catch (e) {}
               }
@@ -130,6 +127,7 @@ export function useCareerOps() {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
+        let currentEvent = 'message';
 
         while (true) {
           const { done, value } = await reader.read();
@@ -139,23 +137,22 @@ export function useCareerOps() {
           const lines = buffer.split('\n');
           buffer = lines.pop() || ''; 
 
-          for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
-            if (line.startsWith('data: ')) {
+          for (const line of lines) {
+            if (line.trim() === '') {
+              currentEvent = 'message';
+            } else if (line.startsWith('event: ')) {
+              currentEvent = line.replace('event: ', '').trim();
+            } else if (line.startsWith('data: ')) {
               const dataStr = line.replace('data: ', '').trim();
               if (dataStr) {
                 try {
                   const data = JSON.parse(dataStr);
-                  const eventTypeLine = lines[i-1];
-                  if (eventTypeLine && eventTypeLine.startsWith('event: ')) {
-                    const eventType = eventTypeLine.replace('event: ', '').trim();
-                    if (eventType === 'progress' && onProgress) {
-                      onProgress(data);
-                    } else if (eventType === 'result') {
-                      resolve(data);
-                    } else if (eventType === 'error') {
-                      reject(new Error(data.message));
-                    }
+                  if (currentEvent === 'progress' && onProgress) {
+                    onProgress(data);
+                  } else if (currentEvent === 'result') {
+                    resolve(data);
+                  } else if (currentEvent === 'error') {
+                    reject(new Error(data.message));
                   }
                 } catch (e) {}
               }
@@ -177,6 +174,7 @@ export function useCareerOps() {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
+        let currentEvent = 'message';
 
         while (true) {
           const { done, value } = await reader.read();
@@ -186,23 +184,22 @@ export function useCareerOps() {
           const lines = buffer.split('\n');
           buffer = lines.pop() || ''; 
 
-          for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
-            if (line.startsWith('data: ')) {
+          for (const line of lines) {
+            if (line.trim() === '') {
+              currentEvent = 'message';
+            } else if (line.startsWith('event: ')) {
+              currentEvent = line.replace('event: ', '').trim();
+            } else if (line.startsWith('data: ')) {
               const dataStr = line.replace('data: ', '').trim();
               if (dataStr) {
                 try {
                   const data = JSON.parse(dataStr);
-                  const eventTypeLine = lines[i-1];
-                  if (eventTypeLine && eventTypeLine.startsWith('event: ')) {
-                    const eventType = eventTypeLine.replace('event: ', '').trim();
-                    if (eventType === 'progress' && onProgress) {
-                      onProgress(data);
-                    } else if (eventType === 'result') {
-                      resolve(data);
-                    } else if (eventType === 'error') {
-                      reject(new Error(data.message));
-                    }
+                  if (currentEvent === 'progress' && onProgress) {
+                    onProgress(data);
+                  } else if (currentEvent === 'result') {
+                    resolve(data);
+                  } else if (currentEvent === 'error') {
+                    reject(new Error(data.message));
                   }
                 } catch (e) {}
               }

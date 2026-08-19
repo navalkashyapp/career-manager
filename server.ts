@@ -16,7 +16,7 @@ import * as fs from 'fs';
 import { z } from 'zod';
 import { OutreachAgent } from './src/lib/agents/OutreachAgent';
 import { careerOpsRouter } from './src/lib/api/careerOpsRouter';
-import { withExponentialBackoff } from './src/lib/utils/withExponentialBackoff';
+import { callGeminiApi } from './src/lib/utils/geminiClient';
 
 const timeoutMiddleware = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   res.setTimeout(30000, () => {
@@ -68,15 +68,13 @@ Return the result as a JSON object with this structure:
   "missingKeywords": ["string", "string"]
 }
       `;
-      const response = await withExponentialBackoff(() => 
-        ai.models.generateContent({
-          model: GEMINI_MODELS.FLASH,
-          contents: prompt,
-          config: {
-            responseMimeType: 'application/json',
-          }
-        })
-      );
+      const response = await callGeminiApi({
+        model: GEMINI_MODELS.FLASH,
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+        }
+      });
       res.json(JSON.parse(response.text || '{}'));
     } catch (error: any) {
       console.error(error);
@@ -112,15 +110,13 @@ Return the result as a JSON object with this structure:
   "redFlags": ["string"]
 }
       `;
-      const response = await withExponentialBackoff(() => 
-        ai.models.generateContent({
-          model: GEMINI_MODELS.FLASH,
-          contents: prompt,
-          config: {
-            responseMimeType: 'application/json',
-          }
-        })
-      );
+      const response = await callGeminiApi({
+        model: GEMINI_MODELS.FLASH,
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+        }
+      });
       res.json(JSON.parse(response.text || '{}'));
     } catch (error: any) {
       console.error(error);
@@ -142,15 +138,13 @@ Return the result as a JSON object with this structure:
   "behavioralPrompts": [{"prompt": "string", "whyTheyAskThis": "string"}]
 }
       `;
-      const response = await withExponentialBackoff(() => 
-        ai.models.generateContent({
-          model: GEMINI_MODELS.FLASH,
-          contents: prompt,
-          config: {
-            responseMimeType: 'application/json',
-          }
-        })
-      );
+      const response = await callGeminiApi({
+        model: GEMINI_MODELS.FLASH,
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+        }
+      });
       res.json(JSON.parse(response.text || '{}'));
     } catch (error: any) {
       console.error(error);
@@ -171,15 +165,13 @@ Summarize the thread into key action items for the candidate. Return the result 
   "actionItems": ["string"]
 }
       `;
-      const response = await withExponentialBackoff(() => 
-        ai.models.generateContent({
-          model: GEMINI_MODELS.FLASH,
-          contents: prompt,
-          config: {
-            responseMimeType: 'application/json',
-          }
-        })
-      );
+      const response = await callGeminiApi({
+        model: GEMINI_MODELS.FLASH,
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+        }
+      });
       res.json(JSON.parse(response.text || '{}'));
     } catch (error: any) {
       console.error(error);
@@ -350,15 +342,13 @@ Summarize the thread into key action items for the candidate. Return the result 
       Raw LinkedIn Data: ${linkedinData}
       `;
       
-      const response = await withExponentialBackoff(() => 
-        ai.models.generateContent({
-          model: GEMINI_MODELS.PRO,
-          contents: prompt,
-          config: {
-            responseMimeType: 'application/json',
-          }
-        })
-      );
+      const response = await callGeminiApi({
+        model: GEMINI_MODELS.PRO,
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+        }
+      });
       
       res.json(JSON.parse(response.text || '{}'));
     } catch (error: any) {
@@ -385,12 +375,10 @@ Summarize the thread into key action items for the candidate. Return the result 
       Provide helpful, real-time advice based on their profile and applications.
       `;
       
-      const response = await withExponentialBackoff(() => 
-        ai.models.generateContent({
-          model: GEMINI_MODELS.PRO,
-          contents: prompt,
-        })
-      );
+      const response = await callGeminiApi({
+        model: GEMINI_MODELS.PRO,
+        contents: prompt
+      }); 
       
       res.json({ reply: response.text });
     } catch (error: any) {
@@ -409,12 +397,10 @@ Summarize the thread into key action items for the candidate. Return the result 
       
       Provide a brief summary of the key takeaways and current state of the user's career coaching session.`;
       
-      const response = await withExponentialBackoff(() => 
-        ai.models.generateContent({
-          model: GEMINI_MODELS.PRO,
-          contents: prompt,
-        })
-      );
+      const response = await callGeminiApi({
+        model: GEMINI_MODELS.PRO,
+        contents: prompt,
+      });
       
       res.json({ summary: response.text });
     } catch (error: any) {

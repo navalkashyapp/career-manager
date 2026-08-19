@@ -12,7 +12,7 @@ import { Search, History, Clock, Trash2, Loader2 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 
 export default function EvaluateView() {
-  const { profile, addApplication } = useData();
+  const { profile, addApplication, searchHistory, addSearchHistory, deleteSearchHistory, clearSearchHistory } = useData();
   const navigate = useNavigate();
   const { evaluateJob, evaluateJobUrl } = useCareerOps();
 
@@ -22,41 +22,45 @@ export default function EvaluateView() {
   const [evalLoading, setEvalLoading] = useState(false);
   const [progressPhase, setProgressPhase] = useState<string>('');
   const [progressPercent, setProgressPercent] = useState<number>(0);
-  const [history, setHistory] = useState<any[]>([]);
 
-  // Load history from localStorage
+  // Migrate history from localStorage to Firestore
   useEffect(() => {
     const saved = localStorage.getItem('careerOpsEvalHistory');
     if (saved) {
       try {
-        setHistory(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        parsed.forEach((entry: any) => {
+          const ts = entry.timestamp || Date.now();
+          addSearchHistory({
+            id: entry.id || ts.toString(),
+            timestamp: ts,
+            input: entry.input || '',
+            result: entry.result || null
+          });
+        });
+        localStorage.removeItem('careerOpsEvalHistory');
       } catch (e) {
-        console.error('Failed to parse eval history', e);
+        console.error('Failed to migrate eval history', e);
       }
     }
-  }, []);
+  }, [addSearchHistory]);
 
-  const saveToHistory = (result: any, input: string) => {
-    const newEntry = {
-      id: Date.now().toString(),
-      timestamp: Date.now(),
+  const saveToHistory = async (result: any, input: string) => {
+    const ts = Date.now();
+    await addSearchHistory({
+      id: ts.toString(),
+      timestamp: ts,
       input,
       result
-    };
-    const newHistory = [newEntry, ...history].slice(0, 20); // Keep last 20
-    setHistory(newHistory);
-    localStorage.setItem('careerOpsEvalHistory', JSON.stringify(newHistory));
+    });
   };
 
-  const clearHistory = () => {
-    setHistory([]);
-    localStorage.removeItem('careerOpsEvalHistory');
+  const clearHistory = async () => {
+    await clearSearchHistory();
   };
 
-  const deleteHistoryItem = (id: string) => {
-    const newHistory = history.filter(item => item.id !== id);
-    setHistory(newHistory);
-    localStorage.setItem('careerOpsEvalHistory', JSON.stringify(newHistory));
+  const deleteHistoryItem = async (id: string) => {
+    await deleteSearchHistory(id);
   };
 
   const handleEvaluate = async () => {
@@ -267,21 +271,21 @@ export default function EvaluateView() {
           <History className="w-5 h-5 text-slate-500" />
           Past Searches
         </h2>
-        {history.length > 0 && (
+        {searchHistory.length > 0 && (
           <Button variant="ghost" size="sm" onClick={clearHistory} className="text-slate-500 hover:text-rose-500">
             Clear History
           </Button>
         )}
       </div>
 
-      {history.length === 0 ? (
+      {searchHistory.length === 0 ? (
         <div className="text-center py-12 bg-white/30 dark:bg-[#1E293B]/30 rounded-xl border border-slate-200 dark:border-[#334155] border-dashed">
           <Clock className="w-8 h-8 text-slate-400 mx-auto mb-3" />
           <p className="text-slate-500 dark:text-slate-400">No past searches yet. Evaluate a job to see it here.</p>
         </div>
       ) : (
         <div className="space-y-4">
-          {history.map((entry) => (
+          {searchHistory.map((entry) => (
             <Card key={entry.id} className="bg-white/50 dark:bg-[#1E293B]/50 backdrop-blur-md border-slate-200 dark:border-[#334155] overflow-hidden">
               <div className="p-4 sm:p-6">
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-4">

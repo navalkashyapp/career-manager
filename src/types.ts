@@ -108,3 +108,10 @@ export interface ContactPerson {
   email: string;
   linkedinUrl: string;
 }
+
+export interface JobSearchHistoryEntry {
+  id: string;
+  timestamp: number;
+  input: string;
+  result: any;
+}

@@ -1,11 +1,21 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import { motion } from 'motion/react';
-import { MoreHorizontal, Building2, MapPin, DollarSign, Activity, Sparkles } from 'lucide-react';
+import { Trash2, Building2, MapPin, DollarSign, Activity, Sparkles } from 'lucide-react';
 import { Target, ExternalLink } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { Button } from '../../../components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '../../../components/ui/dialog';
 import { useUIStore } from '../../../store/useUIStore';
+import { useData } from '../../../hooks/useData';
 import type { JobApplication } from '../../../types';
 
 interface KanbanCardProps {
@@ -14,6 +24,8 @@ interface KanbanCardProps {
 
 export const KanbanCard: React.FC<KanbanCardProps> = ({ app }) => {
   const { openModal } = useUIStore();
+  const { deleteApplication } = useData();
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: app.id });
   
   const style = transform ? {
@@ -38,9 +50,47 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({ app }) => {
     >
       <div className="flex justify-between items-start mb-3">
         <h4 className="font-medium text-slate-900 dark:text-white text-sm leading-snug">{app.jobTitle}</h4>
-        <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-slate-600 dark:text-slate-300">
-          <MoreHorizontal size={16} />
-        </Button>
+        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <DialogTrigger asChild>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              className="h-6 w-6 text-slate-500 hover:text-rose-500 hover:bg-rose-50 dark:text-slate-400 dark:hover:text-rose-400 dark:hover:bg-rose-500/10"
+            >
+              <Trash2 size={14} />
+            </Button>
+          </DialogTrigger>
+          <DialogContent 
+            className="sm:max-w-[425px] border-slate-200 dark:border-[#334155] bg-white dark:bg-[#1E293B]"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <DialogHeader>
+              <DialogTitle className="text-slate-900 dark:text-white">Delete Application</DialogTitle>
+              <DialogDescription className="text-slate-500 dark:text-slate-400">
+                Are you sure you want to delete this application for <strong>{app.companyName}</strong>? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="mt-4 sm:space-x-2">
+              <Button variant="outline" onClick={(e) => { e.stopPropagation(); setIsDeleteDialogOpen(false); }}>
+                Cancel
+              </Button>
+              <Button 
+                variant="destructive" 
+                className="bg-rose-500 hover:bg-rose-600 text-white"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsDeleteDialogOpen(false);
+                  deleteApplication(app.id);
+                }}
+              >
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
       <div className="space-y-2 mb-4">
         <div className="flex items-center text-xs text-slate-500 dark:text-slate-400">

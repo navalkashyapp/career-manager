@@ -316,8 +316,21 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
 
   let evaluationText;
   try {
-    const result = await withExponentialBackoff(() => model.generateContent(`JOB DESCRIPTION TO EVALUATE:\n\n${jdText}`));
+    const prompt = `JOB DESCRIPTION TO EVALUATE:\n\n${jdText}`;
+    
+    console.log('='.repeat(60));
+    console.log(`[Gemini API Request] Model: ${modelName}`);
+    console.log(`[Gemini API Request] Contents:\n`, prompt.substring(0, 500) + '...\n[Truncated]');
+    console.log('='.repeat(60));
+
+    const result = await withExponentialBackoff(() => model.generateContent(prompt));
     evaluationText = result.response.text();
+    
+    console.log('='.repeat(60));
+    console.log(`[Gemini API Response] Model: ${modelName}`);
+    console.log(`[Gemini API Response] Usage:\n`, JSON.stringify(result.response.usageMetadata, null, 2));
+    console.log(`[Gemini API Response] Response Text:\n`, evaluationText.substring(0, 500) + '...\n[Truncated]');
+    console.log('='.repeat(60));
     const usage = {
       prompt_tokens: result.response.usageMetadata?.promptTokenCount ?? 0,
       completion_tokens: result.response.usageMetadata?.candidatesTokenCount ?? 0,
