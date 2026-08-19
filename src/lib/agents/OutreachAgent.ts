@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type, Schema } from '@google/genai';
 import { GEMINI_MODELS } from '../../config/gemini';
-import { withExponentialBackoff } from '../utils/withExponentialBackoff';
+import { callGeminiApi } from '../utils/geminiClient';
 
 export class OutreachAgent {
   private ai: GoogleGenAI;
@@ -27,17 +27,15 @@ Return the result as a JSON object with this structure:
 }
     `;
 
-    const response = await withExponentialBackoff(() => 
-      this.ai.models.generateContent({
-        model: GEMINI_MODELS.FLASH,
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-        }
-      }),
-      600000,
+    const response = await callGeminiApi({
+      model: GEMINI_MODELS.FLASH,
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+      },
+      maxTimeoutMs: 600000,
       onRetry
-    );
+    });
     
     return JSON.parse(response.text || '{}');
   }

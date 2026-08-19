@@ -7,8 +7,10 @@ export async function callGeminiApi(options: {
   model: string;
   contents: string | any[];
   config?: any;
+  maxTimeoutMs?: number;
+  onRetry?: (attempt: number, delayMs: number, timeElapsedMs: number, maxTimeoutMs: number) => void;
 }) {
-  const { model, contents, config } = options;
+  const { model, contents, config, maxTimeoutMs = 30000, onRetry } = options;
 
   console.log('='.repeat(60));
   console.log(`[Gemini API Request] Model: ${model}`);
@@ -23,7 +25,9 @@ export async function callGeminiApi(options: {
       model,
       contents,
       config
-    })
+    }),
+    maxTimeoutMs,
+    onRetry
   );
 
   console.log('='.repeat(60));

@@ -1,6 +1,6 @@
 import { GoogleGenAI, Schema } from '@google/genai';
 import { GEMINI_MODELS } from '../config/gemini';
-import { withExponentialBackoff } from '../lib/utils/withExponentialBackoff';
+import { callGeminiApi } from '../lib/utils/geminiClient';
 
 export abstract class BaseAgent {
   protected ai: GoogleGenAI;
@@ -33,16 +33,14 @@ export abstract class BaseAgent {
     try {
       console.log(`\n================= AI REQUEST: ${this.constructor.name} =================\n`, fullPrompt, '\n====================================================================\n');
       
-      const response = await withExponentialBackoff(() => 
-        this.ai.models.generateContent({
-          model: this.model,
-          contents: fullPrompt,
-          config: {
-            responseMimeType: 'application/json',
-            responseSchema: schema
-          }
-        })
-      );
+      const response = await callGeminiApi({
+        model: this.model,
+        contents: fullPrompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: schema
+        }
+      });
       
       console.log(`\n================= AI RESPONSE: ${this.constructor.name} =================\n`, response?.text, '\n======================================================================\n');
       return JSON.parse(response?.text || '{}');
