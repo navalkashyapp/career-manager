@@ -19,7 +19,7 @@ export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
   const [error, setError] = useState<string | null>(null);
 
   const { evaluateJobUrl } = useCareerOps();
-  const { addApplication } = useData();
+  const { profile, addApplication } = useData();
   const queryClient = useQueryClient();
 
   if (!isOpen) return null;
@@ -34,7 +34,7 @@ export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
     setProgressPercent(5);
 
     try {
-      const data: any = await evaluateJobUrl(url, (progress) => {
+      const data: any = await evaluateJobUrl(url, profile, (progress) => {
         setProgressPhase(progress.phase);
         setProgressPercent(progress.percentage);
       });
@@ -59,7 +59,7 @@ export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
         salaryRange: '',
         targetLevel: '',
         contacts: [],
-        rawJobDescription: '',
+        rawJobDescription: data.rawJobDescription || '',
         matchScore: data.score,
         stage: 'Targeting',
         notes: data.evaluationText || '',
