@@ -6,13 +6,26 @@ import { useData } from '../../../hooks/useData';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from '../../../components/ui/card';
 import { formatDistanceToNow } from 'date-fns';
 import { Search, History, Clock, Trash2, Loader2 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 
 export default function EvaluateView() {
-  const { profile, addApplication, searchHistory, addSearchHistory, deleteSearchHistory, clearSearchHistory } = useData();
+  const {
+    profile,
+    addApplication,
+    searchHistory,
+    addSearchHistory,
+    deleteSearchHistory,
+    clearSearchHistory,
+  } = useData();
   const navigate = useNavigate();
   const { evaluateJob, evaluateJobUrl } = useCareerOps();
 
@@ -35,7 +48,7 @@ export default function EvaluateView() {
             id: entry.id || ts.toString(),
             timestamp: ts,
             input: entry.input || '',
-            result: entry.result || null
+            result: entry.result || null,
           });
         });
         localStorage.removeItem('careerOpsEvalHistory');
@@ -51,7 +64,7 @@ export default function EvaluateView() {
       id: ts.toString(),
       timestamp: ts,
       input,
-      result
+      result,
     });
   };
 
@@ -65,14 +78,18 @@ export default function EvaluateView() {
 
   const handleEvaluate = async () => {
     if (!evalInput.trim()) return;
-    console.log('[EvaluateView] Starting evaluation for input:', evalInput.substring(0, 50) + '...');
+    console.log(
+      '[EvaluateView] Starting evaluation for input:',
+      evalInput.substring(0, 50) + '...',
+    );
     setEvalError(null);
     setEvalResult(null);
     setEvalLoading(true);
     setProgressPhase('Connecting...');
     setProgressPercent(5);
     try {
-      const isUrl = evalInput.trim().startsWith('http://') || evalInput.trim().startsWith('https://');
+      const isUrl =
+        evalInput.trim().startsWith('http://') || evalInput.trim().startsWith('https://');
       console.log(`[EvaluateView] Input detected as ${isUrl ? 'URL' : 'Raw Text'}`);
 
       const onProgress = (progress: any) => {
@@ -100,7 +117,7 @@ export default function EvaluateView() {
         if (Array.isArray(parsed) && parsed[0]?.message) {
           msg = parsed.map((e: any) => e.message).join(', ');
         }
-      } catch (e) { }
+      } catch (e) {}
       setEvalError(msg);
     } finally {
       setEvalLoading(false);
@@ -111,10 +128,59 @@ export default function EvaluateView() {
 
   const handleAddTargetList = async (result: any) => {
     if (!result) return;
-    console.log('[EvaluateView] Adding evaluated job to Kanban Target list:', result.company, result.role);
+    console.log(
+      '[EvaluateView] Adding evaluated job to Kanban Target list:',
+      result.company,
+      result.role,
+    );
     try {
-      const isUrl = evalInput.trim().startsWith('http://') || evalInput.trim().startsWith('https://');
-      
+      const isUrl =
+        evalInput.trim().startsWith('http://') || evalInput.trim().startsWith('https://');
+      const evalText = result.evaluationText || '';
+
+      let coverLetterMarkdown = '';
+      const clMatch = evalText.match(/## Cover Letter Draft[\s\S]*?(?=##|$)/i);
+      if (clMatch) coverLetterMarkdown = clMatch[0].trim();
+
+      let outreachDrafts: any[] = [];
+      const outreachMatch = evalText.match(/## H\) Outreach Messages[\s\S]*?(?=\n##\s|$)/i);
+      if (outreachMatch) {
+        const text = outreachMatch[0];
+        const parts = text.split(/(?:\n|^)(?:###\s*)?\d\.\s*.*?(?:\n|$)/);
+        if (parts.length > 1) {
+          outreachDrafts = parts.slice(1).map((p: string, i: number) => {
+            const types = ['Recruiter', 'Friend', 'Hiring Manager'];
+            const bodyText = p.replace(/^>\s?/gm, '').trim();
+            // Optional: try to extract a Subject if the AI provided one
+            let subject = 'Outreach Draft';
+            let body = bodyText.replace(/\n---$/, '').trim();
+            const subjMatch = bodyText.match(/^(?:\*\*)?Subject:(?:\*\*)?\s*(.*)(?:\n|$)/i);
+            if (subjMatch) {
+              subject = subjMatch[1].trim();
+              body = body.replace(/^(?:\*\*)?Subject:(?:\*\*)?\s*(.*)(?:\n|$)/i, '').trim();
+            }
+            return {
+              id: Date.now().toString() + '-' + i,
+              type: types[i] || 'Network',
+              subject,
+              body,
+              createdAt: Date.now(),
+            };
+          });
+        }
+      }
+
+      const tailoredResumes = coverLetterMarkdown
+        ? [
+            {
+              id: Date.now().toString(),
+              markdown: coverLetterMarkdown,
+              createdAt: Date.now(),
+              keywordsTargeted: [],
+            },
+          ]
+        : [];
+
       await addApplication({
         id: Date.now().toString(),
         jobTitle: result.role || 'Unknown Title',
@@ -127,10 +193,12 @@ export default function EvaluateView() {
         rawJobDescription: result.rawJobDescription || (!isUrl ? evalInput.trim() : ''),
         matchScore: result.score,
         stage: 'Targeting',
-        notes: result.evaluationText || '',
+        notes: evalText,
+        tailoredResumes,
+        outreachDrafts,
         gapAnalysis: [],
         createdAt: Date.now(),
-        updatedAt: Date.now()
+        updatedAt: Date.now(),
       });
       navigate('/applications');
     } catch (err: any) {
@@ -146,7 +214,9 @@ export default function EvaluateView() {
             <Search className="w-8 h-8 text-indigo-500" />
             Job Evaluator
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-1">Analyze job descriptions and evaluate your match score.</p>
+          <p className="text-slate-500 dark:text-slate-400 mt-1">
+            Analyze job descriptions and evaluate your match score.
+          </p>
         </div>
       </div>
 
@@ -182,7 +252,9 @@ export default function EvaluateView() {
                   <Loader2 className="w-4 h-4 mr-2 animate-spin text-indigo-500" />
                   {progressPhase}
                 </span>
-                <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{progressPercent}%</span>
+                <span className="text-indigo-600 dark:text-indigo-400 font-semibold">
+                  {progressPercent}%
+                </span>
               </div>
               <div className="h-2 w-full bg-slate-200 dark:bg-[#334155] rounded-full overflow-hidden">
                 <div
@@ -202,7 +274,10 @@ export default function EvaluateView() {
                 </div>
                 <div className="text-left sm:text-right bg-slate-800/50 sm:bg-transparent p-3 sm:p-0 rounded-lg">
                   <span className="text-sm text-slate-400 block mb-1">Match Score</span>
-                  <span className="text-3xl font-bold text-indigo-400">{evalResult?.score || 'N/A'} <span className="text-lg text-slate-500">/ 5.0</span></span>
+                  <span className="text-3xl font-bold text-indigo-400">
+                    {evalResult?.score || 'N/A'}{' '}
+                    <span className="text-lg text-slate-500">/ 5.0</span>
+                  </span>
                 </div>
               </div>
 
@@ -225,24 +300,68 @@ export default function EvaluateView() {
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       components={{
-                        h1: ({ node, ...props }) => <h1 className="text-2xl font-bold mt-4 mb-2 text-slate-100 border-b border-slate-700 pb-2" {...props} />,
-                        h2: ({ node, ...props }) => <h2 className="text-xl font-semibold mt-4 mb-2 text-slate-100" {...props} />,
-                        h3: ({ node, ...props }) => <h3 className="text-lg font-medium mt-3 mb-2 text-slate-200" {...props} />,
-                        p: ({ node, ...props }) => <div className="mb-3 leading-relaxed" {...props} />,
-                        ul: ({ node, ...props }) => <ul className="list-disc pl-5 mb-3 space-y-1" {...props} />,
-                        ol: ({ node, ...props }) => <ol className="list-decimal pl-5 mb-3 space-y-1" {...props} />,
+                        h1: ({ node, ...props }) => (
+                          <h1
+                            className="text-2xl font-bold mt-4 mb-2 text-slate-100 border-b border-slate-700 pb-2"
+                            {...props}
+                          />
+                        ),
+                        h2: ({ node, ...props }) => (
+                          <h2
+                            className="text-xl font-semibold mt-4 mb-2 text-slate-100"
+                            {...props}
+                          />
+                        ),
+                        h3: ({ node, ...props }) => (
+                          <h3 className="text-lg font-medium mt-3 mb-2 text-slate-200" {...props} />
+                        ),
+                        p: ({ node, ...props }) => (
+                          <div className="mb-3 leading-relaxed" {...props} />
+                        ),
+                        ul: ({ node, ...props }) => (
+                          <ul className="list-disc pl-5 mb-3 space-y-1" {...props} />
+                        ),
+                        ol: ({ node, ...props }) => (
+                          <ol className="list-decimal pl-5 mb-3 space-y-1" {...props} />
+                        ),
                         li: ({ node, ...props }) => <li className="text-slate-300" {...props} />,
-                        strong: ({ node, ...props }) => <strong className="font-semibold text-slate-200" {...props} />,
-                        table: ({ node, ...props }) => <div className="overflow-x-auto mb-4"><table className="w-full text-left border-collapse" {...props} /></div>,
-                        th: ({ node, ...props }) => <th className="border-b border-slate-700 py-2 px-3 font-semibold text-slate-200 bg-slate-800/50" {...props} />,
-                        td: ({ node, ...props }) => <td className="border-b border-slate-800 py-2 px-3 align-top" {...props} />,
+                        strong: ({ node, ...props }) => (
+                          <strong className="font-semibold text-slate-200" {...props} />
+                        ),
+                        table: ({ node, ...props }) => (
+                          <div className="overflow-x-auto mb-4">
+                            <table className="w-full text-left border-collapse" {...props} />
+                          </div>
+                        ),
+                        th: ({ node, ...props }) => (
+                          <th
+                            className="border-b border-slate-700 py-2 px-3 font-semibold text-slate-200 bg-slate-800/50"
+                            {...props}
+                          />
+                        ),
+                        td: ({ node, ...props }) => (
+                          <td
+                            className="border-b border-slate-800 py-2 px-3 align-top"
+                            {...props}
+                          />
+                        ),
                         code: ({ node, inline, ...props }: any) =>
                           inline ? (
-                            <code className="bg-black/40 px-1.5 py-0.5 rounded text-indigo-300 font-mono text-xs" {...props} />
+                            <code
+                              className="bg-black/40 px-1.5 py-0.5 rounded text-indigo-300 font-mono text-xs"
+                              {...props}
+                            />
                           ) : (
-                            <pre className="bg-black/40 p-3 rounded-lg overflow-x-auto mb-3 font-mono text-xs border border-slate-800"><code className="text-indigo-300" {...props} /></pre>
+                            <pre className="bg-black/40 p-3 rounded-lg overflow-x-auto mb-3 font-mono text-xs border border-slate-800">
+                              <code className="text-indigo-300" {...props} />
+                            </pre>
                           ),
-                        blockquote: ({ node, ...props }) => <blockquote className="border-l-2 border-indigo-500 pl-4 py-1 my-3 bg-indigo-500/5 text-slate-300 italic rounded-r-lg" {...props} />
+                        blockquote: ({ node, ...props }) => (
+                          <blockquote
+                            className="border-l-2 border-indigo-500 pl-4 py-1 my-3 bg-indigo-500/5 text-slate-300 italic rounded-r-lg"
+                            {...props}
+                          />
+                        ),
                       }}
                     >
                       {evalResult?.evaluationText || evalResult?.report || ''}
@@ -272,7 +391,12 @@ export default function EvaluateView() {
           Past Searches
         </h2>
         {searchHistory.length > 0 && (
-          <Button variant="ghost" size="sm" onClick={clearHistory} className="text-slate-500 hover:text-rose-500">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearHistory}
+            className="text-slate-500 hover:text-rose-500"
+          >
             Clear History
           </Button>
         )}
@@ -281,12 +405,17 @@ export default function EvaluateView() {
       {searchHistory.length === 0 ? (
         <div className="text-center py-12 bg-white/30 dark:bg-[#1E293B]/30 rounded-xl border border-slate-200 dark:border-[#334155] border-dashed">
           <Clock className="w-8 h-8 text-slate-400 mx-auto mb-3" />
-          <p className="text-slate-500 dark:text-slate-400">No past searches yet. Evaluate a job to see it here.</p>
+          <p className="text-slate-500 dark:text-slate-400">
+            No past searches yet. Evaluate a job to see it here.
+          </p>
         </div>
       ) : (
         <div className="space-y-4">
           {searchHistory.map((entry) => (
-            <Card key={entry.id} className="bg-white/50 dark:bg-[#1E293B]/50 backdrop-blur-md border-slate-200 dark:border-[#334155] overflow-hidden">
+            <Card
+              key={entry.id}
+              className="bg-white/50 dark:bg-[#1E293B]/50 backdrop-blur-md border-slate-200 dark:border-[#334155] overflow-hidden"
+            >
               <div className="p-4 sm:p-6">
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-4">
                   <div>
@@ -298,7 +427,10 @@ export default function EvaluateView() {
                     </p>
                     <p className="text-xs text-slate-500 mt-2 flex items-center gap-1">
                       <Clock className="w-3 h-3" />
-                      {entry.timestamp && !isNaN(new Date(entry.timestamp).getTime()) ? formatDistanceToNow(new Date(entry.timestamp)) : 'a while'} ago
+                      {entry.timestamp && !isNaN(new Date(entry.timestamp).getTime())
+                        ? formatDistanceToNow(new Date(entry.timestamp))
+                        : 'a while'}{' '}
+                      ago
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -317,8 +449,16 @@ export default function EvaluateView() {
                 </div>
 
                 <div className="text-sm text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-[#0F172A] p-4 rounded-lg border border-slate-100 dark:border-[#334155]">
-                  <p className="mb-2"><span className="font-semibold text-slate-900 dark:text-white">Archetype:</span> {entry.result?.archetype || 'N/A'}</p>
-                  <p><span className="font-semibold text-slate-900 dark:text-white">Legitimacy:</span> {entry.result?.legitimacy || 'N/A'}</p>
+                  <p className="mb-2">
+                    <span className="font-semibold text-slate-900 dark:text-white">Archetype:</span>{' '}
+                    {entry.result?.archetype || 'N/A'}
+                  </p>
+                  <p>
+                    <span className="font-semibold text-slate-900 dark:text-white">
+                      Legitimacy:
+                    </span>{' '}
+                    {entry.result?.legitimacy || 'N/A'}
+                  </p>
                 </div>
 
                 <div className="mt-4 flex justify-end gap-2">

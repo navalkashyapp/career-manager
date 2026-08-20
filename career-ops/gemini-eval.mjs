@@ -80,6 +80,7 @@ export async function evaluateJob(options = {}) {
     saveReport = true,
     apiKey = process.env.GEMINI_API_KEY,
     onRetry,
+    onProgress,
     profileData
   } = options;
 
@@ -87,8 +88,14 @@ export async function evaluateJob(options = {}) {
     throw new Error('No Job Description provided.');
   }
 
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY not found.');
+  const apiKeys = [
+    process.env.GEMINI_API_KEY_1,
+    process.env.GEMINI_API_KEY_2,
+    apiKey
+  ].filter(Boolean);
+
+  if (apiKeys.length === 0) {
+    throw new Error('No GEMINI_API_KEY provided.');
   }
 
   // ---------------------------------------------------------------------------
@@ -212,7 +219,7 @@ ${(profileData.projects || []).map(p => `
   // ---------------------------------------------------------------------------
   // Build the system prompt (mirrors the Claude skill router logic)
   // ---------------------------------------------------------------------------
-  const systemPrompt = `You are career-ops, an AI-powered job search assistant.
+  const systemPromptBase = `You are career-ops, an AI-powered job search assistant.
 You evaluate job offers against the user's CV using a structured A-G scoring system.
 
 Your evaluation methodology is defined below. Follow it exactly.
@@ -249,8 +256,13 @@ IMPORTANT OPERATING RULES FOR THIS CLI SESSION
    - For Block D (Comp research): provide salary estimates based on your training data, clearly noted as estimates.
    - For Block G (Legitimacy): analyze the JD text only; skip URL/page freshness checks.
    - Post-evaluation file saving is handled by the script, not by you.
-2. ${languageInstruction}
-3. Generate Blocks A through G in full.
+2. ${languageInstruction}`;
+
+  const agent1Prompt = systemPromptBase + `
+3. You are the Foundation Agent. Generate ONLY the following sections in full:
+   ## A) Role Summary
+   ## B) Match with CV
+   ## C) Level and Strategy
 4. At the very end, output a machine-readable summary block in this exact format:
 
 ---SCORE_SUMMARY---
@@ -259,31 +271,37 @@ ROLE: <role title>
 LOCATION: <location or "Remote" or "Unknown">
 SCORE: <global score as decimal, e.g. 3.8>
 ARCHETYPE: <detected archetype>
+---END_SUMMARY---
+`;
+
+  const agent2Prompt = systemPromptBase + `
+3. You are the Market & Prep Agent. Generate ONLY the following sections in full:
+   ## D) Comp and Demand
+   ## E) Customization Plan
+   ## F) Interview Plan
+4. Do NOT output a SCORE_SUMMARY block.
+`;
+
+  const agent3Prompt = systemPromptBase + `
+3. You are the Risk & Outreach Agent. Generate ONLY the following sections in full:
+   ## G) Posting Legitimacy
+   ## Risk Summary
+   ## H) Outreach Messages
+   ## I) Draft Application Answers
+   ## Keywords extracted
+4. At the very end, output a machine-readable summary block in this exact format:
+
+---SCORE_SUMMARY---
 LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
 ---END_SUMMARY---
 `;
 
   // ---------------------------------------------------------------------------
-  // Call Gemini API
+  // Call Gemini API (Multi-Agent Pipeline)
   // ---------------------------------------------------------------------------
-  console.log(`🤖  Calling Gemini (${modelName})... this may take 30-60 seconds.\n`);
+  console.log(`🤖  Calling Gemini via Multi-Agent Pipeline... this may take 15-30 seconds.\n`);
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-  // Prompt caching (#1709) — engine 3 of the four, adapted to Gemini's shape.
-  // Gemini has no `cache_control` field; its lever is the ~12K-token static prefix
-  // (shared + oferta + cv) being a stable `systemInstruction` rather than the first
-  // turn of `contents` — that's what its 2.5 models cache implicitly across
-  // back-to-back requests. So the static context moves to `systemInstruction` and
-  // generateContent() carries only the per-JD user turn. The prompt text is
-  // unchanged — just where it sits in the request.
-  const model = genAI.getGenerativeModel({
-    model: modelName,
-    systemInstruction: systemPrompt,
-    generationConfig: {
-      temperature: 0.4,      // deterministic enough for structured evaluation
-      maxOutputTokens: 8192, // full 7-block evaluation
-    },
-  });
+  const clients = apiKeys.map(k => new GoogleGenerativeAI(k));
 
   async function withExponentialBackoff(operation, timeoutMs = 600000) {
     const startTime = Date.now();
@@ -291,7 +309,9 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
     let attempt = 1;
     while (true) {
       try {
-        return await operation();
+        const clientIndex = (attempt - 1) % clients.length;
+        const currentClient = clients[clientIndex];
+        return await operation(currentClient);
       } catch (err) {
         const is503 = err?.status === 503 || String(err?.message || '').includes('503') || String(err?.message || '').includes('high demand');
         const is429 = err?.status === 429 || String(err?.message || '').includes('429');
@@ -301,7 +321,7 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
         if (timeElapsed + delay > timeoutMs) {
           throw new Error(`Timeout of ${timeoutMs}ms exceeded while retrying API. Last error: ${err.message}`);
         }
-        process.stderr.write(`[API Error] ${err.status || err.message}. Retrying in ${delay / 1000} seconds...\n`);
+        process.stderr.write(`[API Error] ${err.status || err.message}. Switching key and retrying in ${delay / 1000} seconds...\n`);
         
         if (onRetry) {
           onRetry(attempt, delay, timeElapsed, timeoutMs);
@@ -316,31 +336,116 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
 
   let evaluationText;
   try {
-    const prompt = `JOB DESCRIPTION TO EVALUATE:\n\n${jdText}`;
+    if (onProgress) onProgress('Extracting core job details...', 10);
+    console.log(`[Multi-Agent] Starting JD Extractor (gemini-3.5-flash)...`);
     
+    const extractPrompt = `You are an expert technical recruiter and text analyst.
+I have a raw job description that may contain noise, boilerplate, EEO statements, or formatting artifacts.
+Extract ALL core job responsibilities, ALL required and preferred tech stack/skills, and ALL key company details. 
+Do NOT omit any technical requirements or role expectations. Return a comprehensive, clean version of the actual job without the noise. Do not include a conversational preamble.
+
+RAW JOB DESCRIPTION:
+${jdText}`;
+    
+    const extractRes = await withExponentialBackoff((client) => {
+      const extractorModel = client.getGenerativeModel({
+        model: 'gemini-3.5-flash',
+        generationConfig: { temperature: 0.1, maxOutputTokens: 8192 }
+      });
+      return extractorModel.generateContent(extractPrompt);
+    });
+    const cleanedJd = extractRes.response.text();
+    
+    const prompt = `JOB DESCRIPTION TO EVALUATE:\n\n${cleanedJd}`;
+
     console.log('='.repeat(60));
-    console.log(`[Gemini API Request] Model: ${modelName}`);
     console.log(`[Gemini API Request] Contents:\n`, prompt.substring(0, 500) + '...\n[Truncated]');
     console.log('='.repeat(60));
 
-    const result = await withExponentialBackoff(() => model.generateContent(prompt));
-    evaluationText = result.response.text();
+    if (onProgress) onProgress('Running parallel evaluation agents...', 30);
+
+    const runAgent = async (sysPrompt, agentName, targetModel) => {
+      console.log(`[Multi-Agent] Starting ${agentName} (${targetModel})...`);
+      const result = await withExponentialBackoff((client) => {
+        const model = client.getGenerativeModel({
+          model: targetModel,
+          systemInstruction: sysPrompt,
+          generationConfig: {
+            temperature: 0.4,
+            maxOutputTokens: 8192,
+          },
+        });
+        return model.generateContent(prompt);
+      });
+      const usage = {
+        prompt_tokens: result.response.usageMetadata?.promptTokenCount ?? 0,
+        completion_tokens: result.response.usageMetadata?.candidatesTokenCount ?? 0,
+        total_tokens: result.response.usageMetadata?.totalTokenCount ?? 0,
+        cached_tokens: result.response.usageMetadata?.cachedContentTokenCount ?? 0
+      }
+      tracker.record(`eval-${agentName}`, usage);
+      return result.response.text();
+    };
+
+    let completedAgents = 0;
+    const handleAgent = async (sysPrompt, agentName, targetModel) => {
+      const text = await runAgent(sysPrompt, agentName, targetModel);
+      completedAgents++;
+      if (onProgress) onProgress(`${agentName} completed.`, 30 + (completedAgents * 20));
+      return text;
+    };
+
+    const results = [];
+    results.push(await handleAgent(agent1Prompt, 'Foundation Agent', 'gemini-3.7-flash').then(v => ({status: 'fulfilled', value: v})).catch(e => ({status: 'rejected', reason: e})));
+    results.push(await handleAgent(agent2Prompt, 'Market & Prep Agent', 'gemini-3.5-flash').then(v => ({status: 'fulfilled', value: v})).catch(e => ({status: 'rejected', reason: e})));
+    results.push(await handleAgent(agent3Prompt, 'Risk & Outreach Agent', 'gemini-3.5-flash').then(v => ({status: 'fulfilled', value: v})).catch(e => ({status: 'rejected', reason: e})));
+
+    const text1 = results[0].status === 'fulfilled' ? results[0].value : `> ⚠️ **Error:** Foundation Agent failed: ${results[0].reason?.message || 'Unknown'}\n\n## A) Role Summary\n⚠️ Failed to generate.\n\n## B) Match with CV\n⚠️ Failed to generate.\n\n## C) Level and Strategy\n⚠️ Failed to generate.\n\n---SCORE_SUMMARY---\nCOMPANY: Unknown\nROLE: N/A\nLOCATION: Unknown\nSCORE: 0\nARCHETYPE: N/A\n---END_SUMMARY---`;
+    const text2 = results[1].status === 'fulfilled' ? results[1].value : `> ⚠️ **Error:** Market & Prep Agent failed: ${results[1].reason?.message || 'Unknown'}\n\n## D) Comp and Demand\n⚠️ Failed to generate.\n\n## E) Customization Plan\n⚠️ Failed to generate.\n\n## F) Interview Plan\n⚠️ Failed to generate.`;
+    const text3 = results[2].status === 'fulfilled' ? results[2].value : `> ⚠️ **Error:** Risk & Outreach Agent failed: ${results[2].reason?.message || 'Unknown'}\n\n## G) Posting Legitimacy\n⚠️ Failed to generate.\n\n---SCORE_SUMMARY---\nLEGITIMACY: Unknown\n---END_SUMMARY---`;
+
+    let company = 'Unknown', role = 'Unknown', location = 'Unknown', score = '?', archetype = 'Unknown', legitimacy = 'Unknown';
+
+    const extractScoreSummary = (text) => {
+      const m = text.match(/---SCORE_SUMMARY---\s*([\s\S]*?)---END_SUMMARY---/);
+      if (!m) return {};
+      const block = m[1];
+      const ex = (key) => {
+        const r = new RegExp(`^\\s*${key}:\\s*(.+)$`, 'mi');
+        const match = block.match(r);
+        return match ? match[1].trim() : undefined;
+      };
+      return {
+        company: ex('COMPANY'),
+        role: ex('ROLE'),
+        location: ex('LOCATION'),
+        score: ex('SCORE'),
+        archetype: ex('ARCHETYPE'),
+        legitimacy: ex('LEGITIMACY')
+      };
+    };
+
+    const sum1 = extractScoreSummary(text1);
+    const sum3 = extractScoreSummary(text3);
+
+    company = sum1.company || company;
+    role = sum1.role || role;
+    location = sum1.location || location;
+    score = sum1.score || score;
+    archetype = sum1.archetype || archetype;
+    legitimacy = sum3.legitimacy || legitimacy;
+
+    const clean = (t) => t.replace(/---SCORE_SUMMARY---[\s\S]*?---END_SUMMARY---/g, '').trim();
+
+    evaluationText = `${clean(text1)}\n\n${clean(text2)}\n\n${clean(text3)}\n\n---SCORE_SUMMARY---\nCOMPANY: ${company}\nROLE: ${role}\nLOCATION: ${location}\nSCORE: ${score}\nARCHETYPE: ${archetype}\nLEGITIMACY: ${legitimacy}\n---END_SUMMARY---`;
     
     console.log('='.repeat(60));
-    console.log(`[Gemini API Response] Model: ${modelName}`);
-    console.log(`[Gemini API Response] Usage:\n`, JSON.stringify(result.response.usageMetadata, null, 2));
+    console.log(`[Gemini API Response] Multi-Agent Synthesis Complete`);
     console.log(`[Gemini API Response] Response Text:\n`, evaluationText.substring(0, 500) + '...\n[Truncated]');
     console.log('='.repeat(60));
-    const usage = {
-      prompt_tokens: result.response.usageMetadata?.promptTokenCount ?? 0,
-      completion_tokens: result.response.usageMetadata?.candidatesTokenCount ?? 0,
-      total_tokens: result.response.usageMetadata?.totalTokenCount ?? 0,
-      cached_tokens: result.response.usageMetadata?.cachedContentTokenCount ?? 0
-    };
-    tracker.record('evaluation', usage);
   } catch (err) {
     const sanitizedMsg = (err.message || '').split(apiKey).join('[REDACTED]');
-    throw new Error(`Gemini API error: ${sanitizedMsg}`);
+    throw new Error(`Gemini API error (Multi-Agent): ${sanitizedMsg}`);
   }
 
   try {

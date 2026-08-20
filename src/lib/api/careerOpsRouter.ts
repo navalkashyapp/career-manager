@@ -26,7 +26,9 @@ const careerOpsPath = path.resolve(process.cwd(), 'career-ops');
 // ---------------------------------------------------------------------------
 careerOpsRouter.get('/tracker', async (req, res) => {
   try {
-    const { stdout } = await execFileAsync(process.execPath, ['tracker.mjs', 'query', '--json'], { cwd: careerOpsPath });
+    const { stdout } = await execFileAsync(process.execPath, ['tracker.mjs', 'query', '--json'], {
+      cwd: careerOpsPath,
+    });
     const apps = JSON.parse(stdout);
 
     // Map the fields to match the frontend JobApplication interface
@@ -42,7 +44,7 @@ careerOpsRouter.get('/tracker', async (req, res) => {
       notes: app.notes,
       tailoredResumes: [],
       outreachDrafts: [],
-      gapAnalysis: []
+      gapAnalysis: [],
     }));
 
     res.json(mappedApps);
@@ -71,8 +73,9 @@ careerOpsRouter.post('/tracker/update', async (req, res) => {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       if (line.trim().startsWith('|')) {
-        const parts = line.split('|').map(p => p.trim());
-        if (parts[1] === id) { // # column is usually index 1
+        const parts = line.split('|').map((p) => p.trim());
+        if (parts[1] === id) {
+          // # column is usually index 1
           // find the status column (column 6 in legacy format)
           // The best way without importing `tracker-parse.mjs` is to assume column 6.
           parts[6] = data.stage;
@@ -101,7 +104,7 @@ careerOpsRouter.post('/tracker/update', async (req, res) => {
 const OutreachSchema = z.object({
   jdText: z.string(),
   profileData: z.any(),
-  messageType: z.string()
+  messageType: z.string(),
 });
 
 careerOpsRouter.post('/outreach-stream', async (req, res) => {
@@ -119,20 +122,28 @@ careerOpsRouter.post('/outreach-stream', async (req, res) => {
     sendEvent('progress', { phase: 'Analyzing Job Description...', percentage: 20 });
 
     // Simulate streaming phases
-    setTimeout(() => sendEvent('progress', { phase: 'Matching Candidate Profile...', percentage: 50 }), 1500);
-    setTimeout(() => sendEvent('progress', { phase: 'Drafting Outreach...', percentage: 80 }), 3000);
+    setTimeout(
+      () => sendEvent('progress', { phase: 'Matching Candidate Profile...', percentage: 50 }),
+      1500,
+    );
+    setTimeout(
+      () => sendEvent('progress', { phase: 'Drafting Outreach...', percentage: 80 }),
+      3000,
+    );
 
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const agent = new OutreachAgent(ai);
     const result = await agent.draft(payload, (attempt, delayMs, timeElapsedMs, maxTimeoutMs) => {
       const remainingSeconds = Math.round((maxTimeoutMs - timeElapsedMs) / 1000);
-      sendEvent('progress', { phase: `API Overloaded. Retrying attempt ${attempt}... (${remainingSeconds}s remaining)`, percentage: 50 });
+      sendEvent('progress', {
+        phase: `API Overloaded. Retrying attempt ${attempt}... (${remainingSeconds}s remaining)`,
+        percentage: 50,
+      });
     });
 
     sendEvent('progress', { phase: 'Complete', percentage: 100 });
     sendEvent('result', result);
     res.end();
-
   } catch (error: any) {
     sendEvent('error', { message: error.message });
     res.end();
@@ -146,7 +157,7 @@ const EvaluateSchema = z.object({
   jdText: z.string().optional(),
   url: z.string().url().optional(),
   modelName: z.string().optional(),
-  profileData: z.any().optional()
+  profileData: z.any().optional(),
 });
 
 careerOpsRouter.post('/evaluate-stream', async (req, res) => {
@@ -165,33 +176,27 @@ careerOpsRouter.post('/evaluate-stream', async (req, res) => {
 
     sendEvent('progress', { phase: 'Initializing evaluation...', percentage: 10 });
 
-    // Simulate streaming phases (since evaluateJob doesn't natively yield progress)
-    const phases = ['Analyzing Job Description...', 'Matching Profile...', 'Drafting Report...'];
-    let phaseIndex = 0;
-    const interval = setInterval(() => {
-      if (phaseIndex < phases.length) {
-        sendEvent('progress', { phase: phases[phaseIndex], percentage: 20 + phaseIndex * 20 });
-        phaseIndex++;
-      }
-    }, 2000);
-
     // Call the newly exported `evaluateJob` function
-    const result = await evaluateJob({ 
-      jdText, 
+    const result = await evaluateJob({
+      jdText,
       modelName,
-      profileData, 
+      profileData,
       saveReport: true,
-      onRetry: (attempt, delayMs, timeElapsedMs, maxTimeoutMs) => {
+      onProgress: (phase: string, percentage: number) => {
+        sendEvent('progress', { phase, percentage });
+      },
+      onRetry: (attempt: number, delayMs: number, timeElapsedMs: number, maxTimeoutMs: number) => {
         const remainingSeconds = Math.round((maxTimeoutMs - timeElapsedMs) / 1000);
-        sendEvent('progress', { phase: `API Overloaded. Retrying attempt ${attempt}... (${remainingSeconds}s remaining)`, percentage: 50 });
-      }
+        sendEvent('progress', {
+          phase: `API Overloaded. Retrying attempt ${attempt}... (${remainingSeconds}s remaining)`,
+          percentage: 50,
+        });
+      },
     });
 
-    clearInterval(interval);
     sendEvent('progress', { phase: 'Complete', percentage: 100 });
     sendEvent('result', result);
     res.end();
-
   } catch (error: any) {
     sendEvent('error', { message: error.message });
     res.end();
@@ -212,7 +217,7 @@ careerOpsRouter.post('/evaluate-url-stream', async (req, res) => {
   try {
     const { url, modelName, profileData } = EvaluateSchema.parse(req.body);
     if (!url) {
-      throw new Error("URL is required for this endpoint");
+      throw new Error('URL is required for this endpoint');
     }
 
     sendEvent('progress', { phase: 'Scraping Job Description from URL...', percentage: 10 });
@@ -221,37 +226,31 @@ careerOpsRouter.post('/evaluate-url-stream', async (req, res) => {
     const scrapedText = await JobScraperService.scrapeJobPosting(url);
 
     if (!scrapedText || scrapedText.length < 50) {
-      throw new Error("Failed to extract sufficient text from the provided URL.");
+      throw new Error('Failed to extract sufficient text from the provided URL.');
     }
 
     sendEvent('progress', { phase: 'Initializing evaluation...', percentage: 30 });
 
-    // Simulate streaming phases for evaluation
-    const phases = ['Analyzing Job Description...', 'Matching Profile...', 'Drafting Report...'];
-    let phaseIndex = 0;
-    const interval = setInterval(() => {
-      if (phaseIndex < phases.length) {
-        sendEvent('progress', { phase: phases[phaseIndex], percentage: 40 + phaseIndex * 15 });
-        phaseIndex++;
-      }
-    }, 2000);
-
     // Call evaluateJob
-    const result = await evaluateJob({ 
-      jdText: scrapedText, 
+    const result = await evaluateJob({
+      jdText: scrapedText,
       modelName,
-      profileData, 
+      profileData,
       saveReport: true,
+      onProgress: (phase: string, percentage: number) => {
+        sendEvent('progress', { phase, percentage });
+      },
       onRetry: (attempt: number, delayMs: number, timeElapsedMs: number, maxTimeoutMs: number) => {
         const remainingSeconds = Math.round((maxTimeoutMs - timeElapsedMs) / 1000);
-        sendEvent('progress', { phase: `API Overloaded. Retrying attempt ${attempt}... (${remainingSeconds}s remaining)`, percentage: 50 });
-      }
+        sendEvent('progress', {
+          phase: `API Overloaded. Retrying attempt ${attempt}... (${remainingSeconds}s remaining)`,
+          percentage: 50,
+        });
+      },
     });
 
     // Attach the scraped text so the frontend can save it to Firestore
     result.rawJobDescription = scrapedText;
-
-    clearInterval(interval);
 
     // Sync the DB to reflect the new row
     sendEvent('progress', { phase: 'Syncing Tracker Database...', percentage: 95 });
@@ -260,7 +259,6 @@ careerOpsRouter.post('/evaluate-url-stream', async (req, res) => {
     sendEvent('progress', { phase: 'Complete', percentage: 100 });
     sendEvent('result', result);
     res.end();
-
   } catch (error: any) {
     sendEvent('error', { message: error.message });
     res.end();
@@ -272,7 +270,7 @@ careerOpsRouter.post('/evaluate-url-stream', async (req, res) => {
 // ---------------------------------------------------------------------------
 const TailorSchema = z.object({
   jdText: z.string(),
-  profileData: z.any()
+  profileData: z.any(),
 });
 
 careerOpsRouter.post('/tailor-stream', async (req, res) => {
@@ -290,9 +288,18 @@ careerOpsRouter.post('/tailor-stream', async (req, res) => {
     sendEvent('progress', { phase: 'Analyzing Job Description...', percentage: 10 });
 
     // Simulate streaming phases
-    setTimeout(() => sendEvent('progress', { phase: 'Identifying Key Skills...', percentage: 40 }), 1500);
-    setTimeout(() => sendEvent('progress', { phase: 'Rewriting Resume Bullets...', percentage: 70 }), 3000);
-    setTimeout(() => sendEvent('progress', { phase: 'Finalizing formatting...', percentage: 90 }), 4500);
+    setTimeout(
+      () => sendEvent('progress', { phase: 'Identifying Key Skills...', percentage: 40 }),
+      1500,
+    );
+    setTimeout(
+      () => sendEvent('progress', { phase: 'Rewriting Resume Bullets...', percentage: 70 }),
+      3000,
+    );
+    setTimeout(
+      () => sendEvent('progress', { phase: 'Finalizing formatting...', percentage: 90 }),
+      4500,
+    );
 
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     // Quick inline tailor generation
@@ -308,17 +315,21 @@ Return a JSON object with:
   "keySkills": ["skill 1", "skill 2", "skill 3"]
 }
 `;
-    const response = await withExponentialBackoff(() => 
-      ai.models.generateContent({
-        model: 'gemini-3.5-flash',
-        contents: prompt,
-        config: { responseMimeType: 'application/json' }
-      }),
+    const response = await withExponentialBackoff(
+      () =>
+        ai.models.generateContent({
+          model: 'gemini-3.5-flash',
+          contents: prompt,
+          config: { responseMimeType: 'application/json' },
+        }),
       600000,
       (attempt, delayMs, timeElapsedMs, maxTimeoutMs) => {
         const remainingSeconds = Math.round((maxTimeoutMs - timeElapsedMs) / 1000);
-        sendEvent('progress', { phase: `API Overloaded. Retrying attempt ${attempt}... (${remainingSeconds}s remaining)`, percentage: 50 });
-      }
+        sendEvent('progress', {
+          phase: `API Overloaded. Retrying attempt ${attempt}... (${remainingSeconds}s remaining)`,
+          percentage: 50,
+        });
+      },
     );
 
     const result = JSON.parse(response.text || '{}');
@@ -328,7 +339,6 @@ Return a JSON object with:
       sendEvent('result', result);
       res.end();
     }, 6000);
-
   } catch (error: any) {
     sendEvent('error', { message: error.message });
     res.end();

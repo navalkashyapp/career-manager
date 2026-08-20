@@ -477,7 +477,13 @@ Save full evaluation in `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 ## Risk Summary
 (one row per risk signal, fixed order — see the Risk Summary section above)
 
-## H) Draft Application Answers
+## H) Outreach Messages
+Draft 3 short, distinct outreach messages to be used for networking:
+1. **Recruiter:** A professional LinkedIn connection request or short email asking about the role.
+2. **Friend/Connection:** A casual message asking for an internal referral or insights about the company culture.
+3. **Hiring Manager:** A direct, value-driven cold email/message highlighting matching achievements and proposing a brief chat.
+
+## I) Draft Application Answers
 (only if score >= 4.5 — draft answers for the application form)
 
 ---

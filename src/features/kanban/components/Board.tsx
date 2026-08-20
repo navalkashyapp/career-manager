@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useKanban } from '../hooks/useKanban';
 import type { JobStage, JobApplication } from '../../../types';
 import { DndContext, DragEndEvent, closestCorners } from '@dnd-kit/core';
-import { Plus, Search, Filter } from 'lucide-react';
+import { Search, Filter } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Column } from './Column';
@@ -10,13 +10,18 @@ import { TableView } from './TableView';
 import { PrepModal } from './PrepModal';
 import { TailorModal } from './TailorModal';
 import { OutreachModal } from './OutreachModal';
-import { AddJobModal } from './AddJobModal';
+
 import { useUIStore } from '../../../store/useUIStore';
 
 const STAGES: JobStage[] = [
-  'Targeting', 'Referral Requested', 'Applied', 
-  'Recruiter Screen', 'Technical Loop', 'Onsite', 
-  'Offer Extended', 'Archived'
+  'Targeting',
+  'Referral Requested',
+  'Applied',
+  'Recruiter Screen',
+  'Technical Loop',
+  'Onsite',
+  'Offer Extended',
+  'Archived',
 ];
 
 export default function Board() {
@@ -24,7 +29,7 @@ export default function Board() {
   const [view, setView] = useState<'kanban' | 'table'>('kanban');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<JobStage | 'All'>('All');
-  
+
   const { activeModal, activeApp, openModal, closeModal } = useUIStore();
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -36,8 +41,9 @@ export default function Board() {
   };
 
   const filteredApplications = applications.filter((app: JobApplication) => {
-    const matchesSearch = app.companyName.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          app.jobTitle.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch =
+      app.companyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      app.jobTitle.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'All' || app.stage === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -56,7 +62,7 @@ export default function Board() {
           </div>
         </div>
         <div className="flex-1 flex space-x-6 overflow-hidden">
-          {[1, 2, 3, 4].map(i => (
+          {[1, 2, 3, 4].map((i) => (
             <div key={i} className="w-80 flex-shrink-0 flex flex-col h-full space-y-4">
               <div className="h-6 w-32 bg-white dark:bg-[#1E293B] rounded-md"></div>
               <div className="flex-1 bg-slate-100/50 dark:bg-[#0F172A]/50 rounded-xl border border-dashed border-slate-200 dark:border-[#334155]/50 p-2 space-y-4">
@@ -78,23 +84,20 @@ export default function Board() {
     <div className="h-full flex flex-col p-4 md:p-8">
       <div className="flex flex-col xl:flex-row xl:items-center justify-between mb-6 md:mb-8 gap-4">
         <div>
-          <h1 className="text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">Applications</h1>
+          <h1 className="text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">
+            Applications
+          </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-1">Pipeline & Progress Tracking</p>
         </div>
-        
-        <div className="flex flex-wrap items-center gap-4">
-          <Button 
-            onClick={() => openModal('addJob')}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Add Job via URL
-          </Button>
 
+        <div className="flex flex-wrap items-center gap-4">
           <div className="relative">
-            <Search size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500 dark:text-slate-400" />
-            <Input 
-              type="text" 
+            <Search
+              size={18}
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500 dark:text-slate-400"
+            />
+            <Input
+              type="text"
               placeholder="Search company or role..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -109,33 +112,44 @@ export default function Board() {
               className="appearance-none pl-9 pr-8 py-2 bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-[#334155] rounded-lg text-sm text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 cursor-pointer"
             >
               <option value="All">All Stages</option>
-              {STAGES.map(stage => (
-                <option key={stage} value={stage}>{stage}</option>
+              {STAGES.map((stage) => (
+                <option key={stage} value={stage}>
+                  {stage}
+                </option>
               ))}
             </select>
-            <Filter size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500 dark:text-slate-400 pointer-events-none" />
+            <Filter
+              size={16}
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500 dark:text-slate-400 pointer-events-none"
+            />
           </div>
 
           <div className="bg-white dark:bg-[#1E293B] p-1 rounded-lg border border-slate-200 dark:border-[#334155] flex">
-            <Button 
-              variant={view === 'kanban' ? "secondary" : "ghost"}
+            <Button
+              variant="ghost"
               size="sm"
+              className={
+                view === 'kanban'
+                  ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400'
+                  : 'text-slate-500 dark:text-slate-400'
+              }
               onClick={() => setView('kanban')}
             >
               Board
             </Button>
-            <Button 
-              variant={view === 'table' ? "secondary" : "ghost"}
+            <Button
+              variant="ghost"
               size="sm"
+              className={
+                view === 'table'
+                  ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400'
+                  : 'text-slate-500 dark:text-slate-400'
+              }
               onClick={() => setView('table')}
             >
               Table
             </Button>
           </div>
-          <Button className="flex items-center space-x-2 flex-shrink-0">
-            <Plus size={16} />
-            <span className="hidden sm:inline">New App</span>
-          </Button>
         </div>
       </div>
 
@@ -143,13 +157,15 @@ export default function Board() {
         <DndContext collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
           <div className="flex-1 overflow-x-auto pb-4 snap-x snap-mandatory">
             <div className="flex space-x-4 md:space-x-6 h-full items-start w-max">
-              {STAGES.filter(stage => statusFilter === 'All' || stage === statusFilter).map(stage => (
-                <Column 
-                  key={stage} 
-                  stage={stage} 
-                  apps={filteredApplications.filter(a => a.stage === stage)} 
-                />
-              ))}
+              {STAGES.filter((stage) => statusFilter === 'All' || stage === statusFilter).map(
+                (stage) => (
+                  <Column
+                    key={stage}
+                    stage={stage}
+                    apps={filteredApplications.filter((a) => a.stage === stage)}
+                  />
+                ),
+              )}
             </div>
           </div>
         </DndContext>
@@ -157,31 +173,15 @@ export default function Board() {
         <TableView applications={filteredApplications} />
       )}
 
-      {activeModal === 'prep' && activeApp && (
-        <PrepModal 
-          app={activeApp} 
-          onClose={closeModal} 
-        />
-      )}
-      
+      {activeModal === 'prep' && activeApp && <PrepModal app={activeApp} onClose={closeModal} />}
+
       {activeModal === 'tailor' && activeApp && (
-        <TailorModal 
-          app={activeApp} 
-          onClose={closeModal} 
-        />
+        <TailorModal app={activeApp} onClose={closeModal} />
       )}
-      
+
       {activeModal === 'outreach' && activeApp && (
-        <OutreachModal 
-          app={activeApp} 
-          onClose={closeModal} 
-        />
+        <OutreachModal app={activeApp} onClose={closeModal} />
       )}
-      
-      <AddJobModal 
-        isOpen={activeModal === 'addJob'}
-        onClose={closeModal}
-      />
     </div>
   );
 }
