@@ -269,7 +269,7 @@ node gemini-eval.mjs --file ./jds/my-job.txt
 npm run gemini:eval -- "JD text here"
 ```
 
-> **Free tier:** दोनों options billing के बिना काम करते हैं। Native CLI Google OAuth use करता है; API script `gemini-3.5-flash` use करता है (15 RPM, 1M tokens/day free)।
+> **Free tier:** दोनों options billing के बिना काम करते हैं। Native CLI Google OAuth use करता है; API script `gemini-3.8-flash` use करता है (15 RPM, 1M tokens/day free)।
 
 ## Usage
 

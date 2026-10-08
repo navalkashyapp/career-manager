@@ -27,7 +27,9 @@
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "server.js*",
+      "tracker-aliases.json"
     ],
     "rewrites": [
       {

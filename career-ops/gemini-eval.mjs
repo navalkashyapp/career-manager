@@ -14,13 +14,13 @@
  * Requires:
  *   GEMINI_API_KEY in .env (or environment variable)
  *
- * Free-tier model: gemini-3.5-flash (generous quota, no billing required)
+ * Free-tier model: gemini-3.8-flash (generous quota, no billing required)
  *
  * Model deprecation reference (per Google AI for Developers, May 2026):
  *   - gemini-2.0-flash       deprecated 2026-03-31  (do not use)
  *   - gemini-2.0-flash-lite  deprecated 2026-03-31
- *   - gemini-3.5-flash       deprecated 2026-06-17  (current default)
- *   - gemini-3.5-flash-lite  deprecated 2026-07-22
+ *   - gemini-3.8-flash       deprecated 2026-06-17  (current default)
+ *   - gemini-3.8-flash-lite  deprecated 2026-07-22
  * Stable Gemini models follow a 12-month lifecycle from their release date.
  * Source: https://ai.google.dev/gemini-api/docs/models
  *
@@ -57,7 +57,10 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 // ---------------------------------------------------------------------------
 // Paths
 // ---------------------------------------------------------------------------
-const ROOT = dirname(fileURLToPath(import.meta.url));
+const RAW_DIR = dirname(fileURLToPath(import.meta.url));
+const ROOT = existsSync(join(process.cwd(), 'career-ops', 'modes'))
+  ? join(process.cwd(), 'career-ops')
+  : RAW_DIR;
 
 const PATHS = {
   // Primary evaluation logic lives in these two mode files
@@ -76,7 +79,7 @@ const PATHS = {
 export async function evaluateJob(options = {}) {
   let {
     jdText = '',
-    modelName = process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+    modelName = process.env.GEMINI_MODEL || 'gemini-3.8-flash',
     saveReport = true,
     apiKey = process.env.GEMINI_API_KEY,
     onRetry,
@@ -180,7 +183,7 @@ export async function evaluateJob(options = {}) {
 
   if (profileData) {
     console.log('📝  Using dynamically provided profile data from frontend.');
-    
+
     // Format profileData to YAML-like format for targets
     dynamicProfileYml = `
 target_title: "${profileData.targetTitle || ''}"
@@ -283,11 +286,10 @@ ARCHETYPE: <detected archetype>
 `;
 
   const agent3Prompt = systemPromptBase + `
-3. You are the Risk & Outreach Agent. Generate ONLY the following sections in full:
+3. You are the Risk & Application Agent. Generate ONLY the following sections in full:
    ## G) Posting Legitimacy
    ## Risk Summary
-   ## H) Outreach Messages
-   ## I) Draft Application Answers
+   ## H) Draft Application Answers
    ## Keywords extracted
 4. At the very end, output a machine-readable summary block in this exact format:
 
@@ -316,17 +318,17 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
         const is503 = err?.status === 503 || String(err?.message || '').includes('503') || String(err?.message || '').includes('high demand');
         const is429 = err?.status === 429 || String(err?.message || '').includes('429');
         if (!is503 && !is429) throw err;
-        
+
         const timeElapsed = Date.now() - startTime;
         if (timeElapsed + delay > timeoutMs) {
           throw new Error(`Timeout of ${timeoutMs}ms exceeded while retrying API. Last error: ${err.message}`);
         }
         process.stderr.write(`[API Error] ${err.status || err.message}. Switching key and retrying in ${delay / 1000} seconds...\n`);
-        
+
         if (onRetry) {
           onRetry(attempt, delay, timeElapsed, timeoutMs);
         }
-        
+
         await new Promise(resolve => setTimeout(resolve, delay));
         delay *= 2;
         attempt++;
@@ -335,30 +337,64 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
   }
 
   let evaluationText;
+  let cleanedJdJson;
   try {
     if (onProgress) onProgress('Extracting core job details...', 10);
-    console.log(`[Multi-Agent] Starting JD Extractor (gemini-3.5-flash)...`);
-    
+    console.log(`[Multi-Agent] Starting JD Extractor (gemini-3.8-flash)...`);
+
     const extractPrompt = `You are an expert technical recruiter and text analyst.
 I have a raw job description that may contain noise, boilerplate, EEO statements, or formatting artifacts.
-Extract ALL core job responsibilities, ALL required and preferred tech stack/skills, and ALL key company details. 
-Do NOT omit any technical requirements or role expectations. Return a comprehensive, clean version of the actual job without the noise. Do not include a conversational preamble.
+Extract the core details and return them as a structured JSON object.
+Use the following schema:
+{
+  "companyDetails": "Key company information",
+  "roleSummary": "Summary of the role",
+  "coreResponsibilities": ["responsibility 1", "responsibility 2"],
+  "requirements": ["requirement 1", "requirement 2"],
+  "preferredSkills": ["skill 1"],
+  "compensationAndBenefits": "Any salary or benefit info",
+  "postingLegitimacySignals": "Any signals about hiring freeze, remote policies, etc."
+}
 
 RAW JOB DESCRIPTION:
 ${jdText}`;
-    
-    const extractRes = await withExponentialBackoff((client) => {
+
+    const useLocalCli = true;
+
+    const extractRes = await withExponentialBackoff(async (client) => {
+      if (useLocalCli) {
+        const { execFile } = await import('child_process');
+        const { promisify } = await import('util');
+        const execFileAsync = promisify(execFile);
+        const { stdout } = await execFileAsync('/usr/local/bin/agy', ['-p', extractPrompt], { maxBuffer: 10 * 1024 * 1024, timeout: 120000 });
+        // Find JSON block in markdown if agy wraps it, or extract { ... } directly
+        let text = stdout.trim();
+        const jsonMatch = text.match(/```(?:json)?\n([\s\S]*?)\n```/);
+        if (jsonMatch) {
+          text = jsonMatch[1].trim();
+        } else {
+          const start = text.indexOf('{');
+          const end = text.lastIndexOf('}');
+          if (start !== -1 && end !== -1 && end > start) {
+            text = text.slice(start, end + 1);
+          }
+        }
+        return { response: { text: () => text } };
+      }
+
       const extractorModel = client.getGenerativeModel({
-        model: 'gemini-3.5-flash',
-        generationConfig: { temperature: 0.1, maxOutputTokens: 8192 }
+        model: 'gemini-3.8-flash',
+        generationConfig: { temperature: 0.1, maxOutputTokens: 8192, responseMimeType: 'application/json' }
       });
       return extractorModel.generateContent(extractPrompt);
     });
     const cleanedJd = extractRes.response.text();
-    
+
+    // We parse it here to ensure it's valid JSON, then pass the structured string to the next step
+    cleanedJdJson = JSON.parse(cleanedJd);
+
     const prompt = `JOB DESCRIPTION TO EVALUATE:\n\n${cleanedJd}`;
 
-    console.log('='.repeat(60));
     console.log(`[Gemini API Request] Contents:\n`, prompt.substring(0, 500) + '...\n[Truncated]');
     console.log('='.repeat(60));
 
@@ -366,7 +402,16 @@ ${jdText}`;
 
     const runAgent = async (sysPrompt, agentName, targetModel) => {
       console.log(`[Multi-Agent] Starting ${agentName} (${targetModel})...`);
-      const result = await withExponentialBackoff((client) => {
+      const result = await withExponentialBackoff(async (client) => {
+        if (useLocalCli) {
+          const { execFile } = await import('child_process');
+          const { promisify } = await import('util');
+          const execFileAsync = promisify(execFile);
+          const combinedPrompt = `${sysPrompt}\n\n${prompt}`;
+          const { stdout } = await execFileAsync('/usr/local/bin/agy', ['-p', combinedPrompt], { maxBuffer: 10 * 1024 * 1024, timeout: 120000 });
+          return { response: { text: () => stdout.trim() } };
+        }
+
         const model = client.getGenerativeModel({
           model: targetModel,
           systemInstruction: sysPrompt,
@@ -396,13 +441,62 @@ ${jdText}`;
     };
 
     const results = [];
-    results.push(await handleAgent(agent1Prompt, 'Foundation Agent', 'gemini-3.7-flash').then(v => ({status: 'fulfilled', value: v})).catch(e => ({status: 'rejected', reason: e})));
-    results.push(await handleAgent(agent2Prompt, 'Market & Prep Agent', 'gemini-3.5-flash').then(v => ({status: 'fulfilled', value: v})).catch(e => ({status: 'rejected', reason: e})));
-    results.push(await handleAgent(agent3Prompt, 'Risk & Outreach Agent', 'gemini-3.5-flash').then(v => ({status: 'fulfilled', value: v})).catch(e => ({status: 'rejected', reason: e})));
+    if (useLocalCli) {
+      console.log('[Multi-Agent] Running sequentially to prevent CLI overloading...');
+      results.push(await handleAgent(agent1Prompt, 'Foundation Agent', 'gemini-3.8-flash').then(v => ({ status: 'fulfilled', value: v })).catch(e => ({ status: 'rejected', reason: e })));
+      results.push(await handleAgent(agent2Prompt, 'Market & Prep Agent', 'gemini-3.8-flash').then(v => ({ status: 'fulfilled', value: v })).catch(e => ({ status: 'rejected', reason: e })));
+      results.push(await handleAgent(agent3Prompt, 'Risk & Application Agent', 'gemini-3.8-flash').then(v => ({ status: 'fulfilled', value: v })).catch(e => ({ status: 'rejected', reason: e })));
+    } else {
+      results.push(handleAgent(agent1Prompt, 'Foundation Agent', 'gemini-3.8-flash').then(v => ({ status: 'fulfilled', value: v })).catch(e => ({ status: 'rejected', reason: e })));
+      results.push(handleAgent(agent2Prompt, 'Market & Prep Agent', 'gemini-3.8-flash').then(v => ({ status: 'fulfilled', value: v })).catch(e => ({ status: 'rejected', reason: e })));
+      results.push(handleAgent(agent3Prompt, 'Risk & Application Agent', 'gemini-3.8-flash').then(v => ({ status: 'fulfilled', value: v })).catch(e => ({ status: 'rejected', reason: e })));
+      await Promise.all(results);
+    }
 
-    const text1 = results[0].status === 'fulfilled' ? results[0].value : `> ⚠️ **Error:** Foundation Agent failed: ${results[0].reason?.message || 'Unknown'}\n\n## A) Role Summary\n⚠️ Failed to generate.\n\n## B) Match with CV\n⚠️ Failed to generate.\n\n## C) Level and Strategy\n⚠️ Failed to generate.\n\n---SCORE_SUMMARY---\nCOMPANY: Unknown\nROLE: N/A\nLOCATION: Unknown\nSCORE: 0\nARCHETYPE: N/A\n---END_SUMMARY---`;
-    const text2 = results[1].status === 'fulfilled' ? results[1].value : `> ⚠️ **Error:** Market & Prep Agent failed: ${results[1].reason?.message || 'Unknown'}\n\n## D) Comp and Demand\n⚠️ Failed to generate.\n\n## E) Customization Plan\n⚠️ Failed to generate.\n\n## F) Interview Plan\n⚠️ Failed to generate.`;
-    const text3 = results[2].status === 'fulfilled' ? results[2].value : `> ⚠️ **Error:** Risk & Outreach Agent failed: ${results[2].reason?.message || 'Unknown'}\n\n## G) Posting Legitimacy\n⚠️ Failed to generate.\n\n---SCORE_SUMMARY---\nLEGITIMACY: Unknown\n---END_SUMMARY---`;
+    const text1 = results[0].status === 'fulfilled' ? results[0].value : [
+      "> Error: Foundation Agent failed: " + (results[0].reason?.message || 'Unknown'),
+      "",
+      "## A) Role Summary",
+      "Failed to generate.",
+      "",
+      "## B) Match with CV",
+      "Failed to generate.",
+      "",
+      "## C) Level and Strategy",
+      "Failed to generate.",
+      "",
+      "---SCORE_SUMMARY---",
+      "COMPANY: Unknown",
+      "ROLE: N/A",
+      "LOCATION: Unknown",
+      "SCORE: 0",
+      "ARCHETYPE: N/A",
+      "---END_SUMMARY---"
+    ].join('\n');
+
+    const text2 = results[1].status === 'fulfilled' ? results[1].value : [
+      "> Error: Market & Prep Agent failed: " + (results[1].reason?.message || 'Unknown'),
+      "",
+      "## D) Comp and Demand",
+      "Failed to generate.",
+      "",
+      "## E) Customization Plan",
+      "Failed to generate.",
+      "",
+      "## F) Interview Plan",
+      "Failed to generate."
+    ].join('\n');
+
+    const text3 = results[2].status === 'fulfilled' ? results[2].value : [
+      "> Error: Risk & Application Agent failed: " + (results[2].reason?.message || 'Unknown'),
+      "",
+      "## G) Posting Legitimacy",
+      "Failed to generate.",
+      "",
+      "---SCORE_SUMMARY---",
+      "LEGITIMACY: Unknown",
+      "---END_SUMMARY---"
+    ].join('\n');
 
     let company = 'Unknown', role = 'Unknown', location = 'Unknown', score = '?', archetype = 'Unknown', legitimacy = 'Unknown';
 
@@ -438,7 +532,7 @@ ${jdText}`;
     const clean = (t) => t.replace(/---SCORE_SUMMARY---[\s\S]*?---END_SUMMARY---/g, '').trim();
 
     evaluationText = `${clean(text1)}\n\n${clean(text2)}\n\n${clean(text3)}\n\n---SCORE_SUMMARY---\nCOMPANY: ${company}\nROLE: ${role}\nLOCATION: ${location}\nSCORE: ${score}\nARCHETYPE: ${archetype}\nLEGITIMACY: ${legitimacy}\n---END_SUMMARY---`;
-    
+
     console.log('='.repeat(60));
     console.log(`[Gemini API Response] Multi-Agent Synthesis Complete`);
     console.log(`[Gemini API Response] Response Text:\n`, evaluationText.substring(0, 500) + '...\n[Truncated]');
@@ -584,11 +678,10 @@ ${evaluationText.replace(/---SCORE_SUMMARY---[\s\S]*?---END_SUMMARY---/, '').tri
 
   console.log(formatBreakdown(tracker, modelName, 'gemini'));
 
-  return { company, role, location, score, archetype, legitimacy, evaluationText };
+  return { company, role, location, score, archetype, legitimacy, evaluationText, cleanedJdJson };
 }
 
 // ---------------------------------------------------------------------------
-// CLI Execution
 // ---------------------------------------------------------------------------
 if (import.meta.url === `file://${process.argv[1]}` && process.argv[1].endsWith('gemini-eval.mjs')) {
   const args = process.argv.slice(2);
@@ -604,11 +697,11 @@ if (import.meta.url === `file://${process.argv[1]}` && process.argv[1].endsWith(
     USAGE
       node gemini-eval.mjs "<JD text>"
       node gemini-eval.mjs --file ./jds/my-job.txt
-      node gemini-eval.mjs --model gemini-3.5-flash "<JD text>"
+      node gemini-eval.mjs --model gemini-3.8-flash "<JD text>"
 
     OPTIONS
       --file <path>    Read JD from a file instead of inline text
-      --model <name>   Gemini model to use (default: gemini-3.5-flash)
+      --model <name>   Gemini model to use (default: gemini-3.8-flash)
       --no-save        Do not save report to reports/ directory
       --help           Show this help
   `);
@@ -616,7 +709,7 @@ if (import.meta.url === `file://${process.argv[1]}` && process.argv[1].endsWith(
   }
 
   let jdText = '';
-  let modelName = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+  let modelName = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
   let saveReport = true;
 
   for (let i = 0; i < args.length; i++) {

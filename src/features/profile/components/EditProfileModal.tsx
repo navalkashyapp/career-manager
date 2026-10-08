@@ -1,3 +1,4 @@
+import { CoreSkills } from '../../../types';
 import React, { useState } from 'react';
 import {
   X,
@@ -9,10 +10,17 @@ import {
   Building2,
   Terminal,
   User,
+  Globe,
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
-import { UserProfile, CareerEntry, EducationEntry, ProjectBrief } from '../../../types';
+import {
+  UserProfile,
+  CareerEntry,
+  EducationEntry,
+  ProjectBrief,
+  WorkAuthorizationEntry,
+} from '../../../types';
 
 interface EditProfileModalProps {
   isOpen: boolean;
@@ -21,7 +29,7 @@ interface EditProfileModalProps {
   onSave: (updates: Partial<UserProfile>) => Promise<void>;
 }
 
-type TabType = 'basic' | 'career' | 'education' | 'projects' | 'skills';
+type TabType = 'basic' | 'career' | 'education' | 'projects' | 'skills' | 'workauth';
 
 export default function EditProfileModal({
   isOpen,
@@ -35,8 +43,13 @@ export default function EditProfileModal({
 
   // State clones
   const [basicInfo, setBasicInfo] = useState({
+    profileName: profile.profileName || '',
     fullName: profile.fullName || '',
+    email: profile.email || '',
+    phone: profile.phone || '',
     targetTitle: profile.targetTitle || '',
+    targetLevel: profile.targetLevel || '',
+    jobTitle: profile.jobTitle || '',
     location: profile.location || '',
     preferredCompensation: profile.preferredCompensation || '',
     linkedinUrl: profile.linkedinUrl || '',
@@ -47,6 +60,9 @@ export default function EditProfileModal({
     ...(profile.careerHistory || []),
   ]);
   const [education, setEducation] = useState<EducationEntry[]>([...(profile.education || [])]);
+  const [workAuthorization, setWorkAuthorization] = useState<WorkAuthorizationEntry[]>([
+    ...(profile.workAuthorization || []),
+  ]);
   const [projects, setProjects] = useState<ProjectBrief[]>([...(profile.projects || [])]);
   const [coreSkills, setCoreSkills] = useState({ ...(profile.coreSkills || {}) });
 
@@ -60,6 +76,7 @@ export default function EditProfileModal({
         ...basicInfo,
         careerHistory,
         education,
+        workAuthorization,
         projects,
         coreSkills,
       });
@@ -133,6 +150,22 @@ export default function EditProfileModal({
     setEducation(education.filter((_, i) => i !== idx));
   };
 
+  // Work Auth Handlers
+  const addWorkAuth = () => {
+    setWorkAuthorization([
+      { id: Date.now().toString(), country: '', type: '', validity: '' },
+      ...workAuthorization,
+    ]);
+  };
+  const updateWorkAuth = (idx: number, field: keyof WorkAuthorizationEntry, value: string) => {
+    const updated = [...workAuthorization];
+    updated[idx] = { ...updated[idx], [field]: value };
+    setWorkAuthorization(updated);
+  };
+  const removeWorkAuth = (idx: number) => {
+    setWorkAuthorization(workAuthorization.filter((_, i) => i !== idx));
+  };
+
   // Project Handlers
   const addProject = () => {
     setProjects([
@@ -192,6 +225,7 @@ export default function EditProfileModal({
               { id: 'basic', label: 'Basic Info', icon: User },
               { id: 'career', label: 'Career History', icon: Briefcase },
               { id: 'education', label: 'Education', icon: GraduationCap },
+              { id: 'workauth', label: 'Work Authorization', icon: Globe },
               { id: 'projects', label: 'Projects', icon: Building2 },
               { id: 'skills', label: 'Core Skills', icon: Terminal },
             ].map((tab) => (
@@ -224,6 +258,17 @@ export default function EditProfileModal({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Profile Name
+                    </label>
+                    <Input
+                      name="profileName"
+                      value={basicInfo.profileName}
+                      onChange={handleBasicChange}
+                      placeholder="e.g. Main Profile, Frontend Profile"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
                       Full Name
                     </label>
                     <Input
@@ -235,13 +280,57 @@ export default function EditProfileModal({
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Target Title
+                      Target Title (Legacy)
                     </label>
                     <Input
                       name="targetTitle"
                       value={basicInfo.targetTitle}
                       onChange={handleBasicChange}
                       placeholder="e.g. Senior Software Engineer"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Target Level
+                    </label>
+                    <Input
+                      name="targetLevel"
+                      value={basicInfo.targetLevel}
+                      onChange={handleBasicChange}
+                      placeholder="e.g. Senior, L5, Staff"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Target Job Title
+                    </label>
+                    <Input
+                      name="jobTitle"
+                      value={basicInfo.jobTitle}
+                      onChange={handleBasicChange}
+                      placeholder="e.g. Software Engineer"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Email
+                    </label>
+                    <Input
+                      name="email"
+                      value={basicInfo.email}
+                      onChange={handleBasicChange}
+                      placeholder="e.g. jane@example.com"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Phone
+                    </label>
+                    <Input
+                      name="phone"
+                      value={basicInfo.phone}
+                      onChange={handleBasicChange}
+                      placeholder="e.g. +1 555-0123"
                     />
                   </div>
                   <div className="space-y-2">
@@ -454,6 +543,69 @@ export default function EditProfileModal({
                             onChange={(e) => updateEducation(idx, 'endDate', e.target.value)}
                           />
                         </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Work Auth Tab */}
+            {activeTab === 'workauth' && (
+              <div className="space-y-6">
+                <Button
+                  onClick={addWorkAuth}
+                  variant="outline"
+                  className="w-full text-indigo-600 border-indigo-200 hover:bg-indigo-50 dark:border-indigo-500/30 dark:hover:bg-indigo-500/10"
+                >
+                  <Plus className="w-4 h-4 mr-2" /> Add Work Authorization
+                </Button>
+                {workAuthorization.map((auth, idx) => (
+                  <div
+                    key={auth.id || idx}
+                    className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl space-y-4"
+                  >
+                    <div className="flex justify-between items-start">
+                      <h3 className="font-medium text-slate-900 dark:text-white">
+                        Authorization {idx + 1}
+                      </h3>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeWorkAuth(idx)}
+                        className="text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 h-8 px-2"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-slate-500">Country</label>
+                        <Input
+                          value={auth.country}
+                          onChange={(e) => updateWorkAuth(idx, 'country', e.target.value)}
+                          placeholder="e.g. United States"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-slate-500">
+                          Authorization Type
+                        </label>
+                        <Input
+                          value={auth.type}
+                          onChange={(e) => updateWorkAuth(idx, 'type', e.target.value)}
+                          placeholder="e.g. Citizen, H-1B, Green Card"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-slate-500">
+                          Validity / Expiration
+                        </label>
+                        <Input
+                          value={auth.validity}
+                          onChange={(e) => updateWorkAuth(idx, 'validity', e.target.value)}
+                          placeholder="e.g. Indefinite, Dec 2025"
+                        />
                       </div>
                     </div>
                   </div>

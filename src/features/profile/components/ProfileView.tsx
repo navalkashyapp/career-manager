@@ -1,20 +1,63 @@
 import React, { useState } from 'react';
 import { useData } from '../../../hooks/useData';
-import { Briefcase, MapPin, Building2, Terminal, ShieldAlert, Linkedin } from 'lucide-react';
+import { Briefcase, MapPin, Building2, Terminal, ShieldAlert, Linkedin, Globe } from 'lucide-react';
 import { motion } from 'motion/react';
 import ImportLinkedInModal from './ImportLinkedInModal';
 import EditProfileModal from './EditProfileModal';
 import { Button } from '../../../components/ui/button';
 import { Card as ShadcnCard } from '../../../components/ui/card';
 import { Badge } from '../../../components/ui/badge';
+import { Tabs, TabsList, TabsTrigger } from '../../../components/ui/tabs';
+import { Plus, Trash2 } from 'lucide-react';
+import { apiUrl, apiFetch } from '../../../config/api';
 
 export default function ProfileView() {
-  const { profile, updateProfile, loading, error } = useData();
+  const {
+    profile,
+    profiles,
+    activeProfileId,
+    setActiveProfileId,
+    addProfile,
+    deleteProfile,
+    updateProfile,
+    loading,
+    error,
+  } = useData();
   const [isLinkedInModalOpen, setIsLinkedInModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
+  const handleAddProfile = async () => {
+    const newName = prompt('Enter a name for the new profile (e.g., Frontend Profile):');
+    if (!newName) return;
+    try {
+      const newId = await addProfile({
+        ...profile, // Copy data from current active profile
+        profileName: newName,
+      });
+      setActiveProfileId(newId);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to add profile');
+    }
+  };
+
+  const handleDeleteProfile = async () => {
+    if (activeProfileId === 'default') {
+      alert('Cannot delete the main profile');
+      return;
+    }
+    if (confirm('Are you sure you want to delete this profile?')) {
+      try {
+        await deleteProfile(activeProfileId);
+      } catch (err) {
+        console.error(err);
+        alert('Failed to delete profile');
+      }
+    }
+  };
+
   const handleLinkedInImport = async (data: string) => {
-    const res = await fetch('/api/gemini/parse-linkedin', {
+    const res = await apiFetch(apiUrl('/api/gemini/parse-linkedin'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ linkedinData: data }),
@@ -58,6 +101,36 @@ export default function ProfileView() {
 
   return (
     <div className="p-8 max-w-5xl mx-auto space-y-8">
+      <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
+        <Tabs
+          value={activeProfileId}
+          onValueChange={setActiveProfileId}
+          className="w-full overflow-x-auto"
+        >
+          <div className="flex items-center space-x-2">
+            <TabsList className="bg-slate-100 dark:bg-slate-800">
+              {profiles.map((p) => (
+                <TabsTrigger
+                  key={p.id}
+                  value={p.id}
+                  className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700"
+                >
+                  {p.profileName || (p.isDefault ? 'Main Profile' : 'Untitled Profile')}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            <Button
+              variant="outline"
+              onClick={handleAddProfile}
+              className="h-9 px-3 shrink-0 text-slate-600 dark:text-slate-300"
+            >
+              <Plus size={16} className="mr-2" />
+              New Profile
+            </Button>
+          </div>
+        </Tabs>
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">
@@ -79,7 +152,17 @@ export default function ProfileView() {
           <Button variant="outline" onClick={() => setIsEditModalOpen(true)}>
             Edit Profile
           </Button>
+
           <Button className="bg-indigo-500 hover:bg-indigo-600 text-white">Export JSON</Button>
+          {activeProfileId !== 'default' && (
+            <Button
+              variant="outline"
+              onClick={handleDeleteProfile}
+              className="text-rose-500 hover:bg-rose-50 border-rose-200"
+            >
+              <Trash2 size={16} />
+            </Button>
+          )}
         </div>
       </div>
 
@@ -197,6 +280,31 @@ export default function ProfileView() {
                     </p>
                     <p className="text-xs text-slate-400 mt-0.5">
                       {edu.startDate} {edu.endDate ? `- ${edu.endDate}` : ''}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </ShadcnCard>
+          )}
+
+          {profile.workAuthorization && profile.workAuthorization.length > 0 && (
+            <ShadcnCard className="p-6 bg-white/50 dark:bg-[#1E293B]/50 backdrop-blur-md">
+              <h2 className="text-xl font-medium text-slate-900 dark:text-white mb-6 flex items-center space-x-2">
+                <Globe size={20} className="text-amber-400" />
+                <span>Work Authorization</span>
+              </h2>
+              <div className="space-y-6">
+                {profile.workAuthorization.map((auth) => (
+                  <div
+                    key={auth.id}
+                    className="border-l-2 border-slate-200 dark:border-[#334155] pl-4"
+                  >
+                    <h3 className="text-sm font-medium text-slate-900 dark:text-white">
+                      {auth.country}
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{auth.type}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Valid until: {auth.validity || 'Indefinite'}
                     </p>
                   </div>
                 ))}

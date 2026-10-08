@@ -1,15 +1,22 @@
 import React, { useState } from 'react';
 import { useKanban } from '../hooks/useKanban';
 import type { JobStage, JobApplication } from '../../../types';
-import { DndContext, DragEndEvent, closestCorners } from '@dnd-kit/core';
-import { Search, Filter } from 'lucide-react';
+import {
+  DndContext,
+  DragEndEvent,
+  closestCorners,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import { Search, Filter, Plus, AlertCircle } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Column } from './Column';
 import { TableView } from './TableView';
-import { PrepModal } from './PrepModal';
-import { TailorModal } from './TailorModal';
-import { OutreachModal } from './OutreachModal';
+import { AddJobModal } from './AddJobModal';
+import { JobDetailsModal } from './JobDetailsModal';
 
 import { useUIStore } from '../../../store/useUIStore';
 
@@ -29,8 +36,18 @@ export default function Board() {
   const [view, setView] = useState<'kanban' | 'table'>('kanban');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<JobStage | 'All'>('All');
+  const [isAddJobOpen, setIsAddJobOpen] = useState(false);
 
   const { activeModal, activeApp, openModal, closeModal } = useUIStore();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor),
+  );
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -77,7 +94,23 @@ export default function Board() {
   }
 
   if (error) {
-    return <div className="p-8 text-rose-400">Error loading data: {error.message}</div>;
+    return (
+      <div className="h-full flex flex-col items-center justify-center p-8 text-center">
+        <div className="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500 mb-4">
+          <AlertCircle size={24} />
+        </div>
+        <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
+          Error Loading Board
+        </h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mb-6">{error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-medium transition-colors"
+        >
+          Reload Page
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -150,11 +183,19 @@ export default function Board() {
               Table
             </Button>
           </div>
+
+          <Button
+            onClick={() => setIsAddJobOpen(true)}
+            className="bg-indigo-600 hover:bg-indigo-500 text-white flex items-center space-x-1.5 shadow-sm"
+          >
+            <Plus size={16} />
+            <span>Add a job</span>
+          </Button>
         </div>
       </div>
 
       {view === 'kanban' ? (
-        <DndContext collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
+        <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
           <div className="flex-1 overflow-x-auto pb-4 snap-x snap-mandatory">
             <div className="flex space-x-4 md:space-x-6 h-full items-start w-max">
               {STAGES.filter((stage) => statusFilter === 'All' || stage === statusFilter).map(
@@ -163,6 +204,7 @@ export default function Board() {
                     key={stage}
                     stage={stage}
                     apps={filteredApplications.filter((a) => a.stage === stage)}
+                    onAddJob={() => setIsAddJobOpen(true)}
                   />
                 ),
               )}
@@ -173,14 +215,22 @@ export default function Board() {
         <TableView applications={filteredApplications} />
       )}
 
-      {activeModal === 'prep' && activeApp && <PrepModal app={activeApp} onClose={closeModal} />}
+      <AddJobModal isOpen={isAddJobOpen} onClose={() => setIsAddJobOpen(false)} />
 
-      {activeModal === 'tailor' && activeApp && (
-        <TailorModal app={activeApp} onClose={closeModal} />
-      )}
-
-      {activeModal === 'outreach' && activeApp && (
-        <OutreachModal app={activeApp} onClose={closeModal} />
+      {activeModal && activeApp && (
+        <JobDetailsModal
+          app={applications.find((a) => a.id === activeApp.id) || activeApp}
+          onClose={closeModal}
+          initialTab={
+            activeModal === 'prep'
+              ? 'prep'
+              : activeModal === 'tailor'
+                ? 'tailor'
+                : activeModal === 'outreach'
+                  ? 'outreach'
+                  : 'description'
+          }
+        />
       )}
     </div>
   );

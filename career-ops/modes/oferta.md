@@ -477,20 +477,13 @@ Save full evaluation in `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 ## Risk Summary
 (one row per risk signal, fixed order — see the Risk Summary section above)
 
-## H) Outreach Messages
-Draft 3 short, distinct outreach messages to be used for networking:
-1. **Recruiter:** A professional LinkedIn connection request or short email asking about the role.
-2. **Friend/Connection:** A casual message asking for an internal referral or insights about the company culture.
-3. **Hiring Manager:** A direct, value-driven cold email/message highlighting matching achievements and proposing a brief chat.
-
-## I) Draft Application Answers
+## H) Draft Application Answers
 (only if score >= 4.5 — draft answers for the application form)
 
 ---
 
 ## Keywords extracted
 (list of 15-20 keywords from the JD for ATS optimization)
-```
 
 **Machine Summary (required):** every report carries a `## Machine Summary` YAML fence directly after the header — same schema, exact field names, and rules as the "Machine Summary" block in `batch/batch-prompt.md` (do not duplicate the schema here; that file is the source of truth). It includes `advertised_comp`: the JD's own salary figure **verbatim** (e.g. `"80-90k EUR"`), or `null` when the JD states nothing — never estimated, never replaced with researched market data. This key seeds the advertised salary observation read by `node salary-gap.mjs`. It also includes `risk_summary`: the Risk Summary block mirrored as a map (schema and enum values in `batch/batch-prompt.md`).
 

@@ -1,9 +1,13 @@
+version: '3.8'
+
 services:
-  career-manager:
+  career-backend:
     build: .
-    container_name: career-manager
     ports:
       - "3000:3000"
-    env_file:
-      - .env
+    volumes:
+      # Mount data directories to persist them outside the container
+      - ./data:/app/data
+      - ./reports:/app/reports
+      - ./batch:/app/batch
     restart: unless-stopped

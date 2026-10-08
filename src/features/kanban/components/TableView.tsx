@@ -1,6 +1,7 @@
 import React from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { Badge } from '../../../components/ui/badge';
+import { useUIStore } from '../../../store/useUIStore';
 import type { JobApplication } from '../../../types';
 
 interface TableViewProps {
@@ -8,6 +9,8 @@ interface TableViewProps {
 }
 
 export const TableView: React.FC<TableViewProps> = ({ applications }) => {
+  const { openModal } = useUIStore();
+
   return (
     <div className="flex-1 bg-white/50 dark:bg-[#1E293B]/50 border border-slate-200 dark:border-[#334155] rounded-xl overflow-hidden">
       <table className="w-full text-left text-sm">
@@ -21,16 +24,26 @@ export const TableView: React.FC<TableViewProps> = ({ applications }) => {
           </tr>
         </thead>
         <tbody className="divide-y divide-[#334155]">
-          {applications.map(app => (
-            <tr key={app.id} className="hover:bg-white dark:bg-[#1E293B] transition-colors cursor-pointer">
-              <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">{app.jobTitle}</td>
+          {applications.map((app) => (
+            <tr
+              key={app.id}
+              onClick={() => openModal('details', app)}
+              className="hover:bg-slate-100/60 dark:hover:bg-[#1E293B] transition-colors cursor-pointer"
+            >
+              <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">
+                {app.jobTitle}
+              </td>
               <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{app.companyName}</td>
               <td className="px-6 py-4">
-                <Badge variant="secondary">
-                  {app.stage}
-                </Badge>
+                <Badge variant="secondary">{app.stage}</Badge>
               </td>
-              <td className="px-6 py-4 text-indigo-400">{app.matchScore}%</td>
+              <td className="px-6 py-4 text-indigo-400">
+                {app.matchScore && app.matchScore > 0 ? (
+                  `${app.matchScore}%`
+                ) : (
+                  <span className="text-slate-400 text-xs">Targeting</span>
+                )}
+              </td>
               <td className="px-6 py-4 text-slate-500">{formatDistanceToNow(app.updatedAt)} ago</td>
             </tr>
           ))}

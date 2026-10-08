@@ -1,40 +1,23 @@
-FROM ubuntu:22.04
+FROM node:20-alpine
 
-# Prevent interactive prompts
-ENV DEBIAN_FRONTEND=noninteractive
+# Install SQLite required by tracker.mjs
+RUN apk add --no-cache sqlite
 
-# Install sudo, curl, git and update
-RUN apt-get update && \
-    apt-get install -y sudo curl git && \
-    rm -rf /var/lib/apt/lists/*
+WORKDIR /app
 
-# Install Node.js (v22+ required for node:sqlite)
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && \
-    sudo apt-get install -y nodejs
+# Copy package files
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
 
-# Install PM2 globally
-RUN sudo npm install -g pm2
+# Copy built code and configuration
+COPY dist/ ./dist/
+COPY career-ops/ ./career-ops/
+COPY data/ ./data/
+COPY reports/ ./reports/
+COPY .env ./
+COPY service-account.json ./
 
-# Setup Project Directory
-WORKDIR /root/Career-Manager
-
-# Copy dependencies definitions
-COPY package.json package-lock.json* ./
-
-# Install Project Dependencies
-RUN npm install
-
-# Install Playwright browsers and their system dependencies
-RUN npx playwright install chromium --with-deps
-
-# Copy all other project files
-COPY . .
-
-# Build the project
-RUN npm run build
-
-# Expose the server port
 EXPOSE 3000
 
-# Start with PM2
-CMD ["pm2-runtime", "start", "npm", "--name", "career-manager", "--", "start"]
+# Start the built server
+CMD ["node", "dist/server.js"]

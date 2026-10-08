@@ -8,7 +8,14 @@ import { cn } from '../../../lib/utils';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Textarea } from '../../../components/ui/textarea';
-import { Card as ShadcnCard, CardContent, CardHeader, CardTitle, CardDescription } from '../../../components/ui/card';
+import {
+  Card as ShadcnCard,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from '../../../components/ui/card';
+import { apiUrl, apiFetch } from '../../../config/api';
 
 const EMAIL_TEMPLATES = [
   {
@@ -24,7 +31,7 @@ I am writing to follow up on my application for the [Role] position. I am very i
 Please let me know if you need any additional information from my end.
 
 Best regards,
-[Your Name]`
+[Your Name]`,
   },
   {
     id: 'thank-you',
@@ -37,7 +44,7 @@ Thank you for taking the time to speak with me today about the [Role] position. 
 I'm very excited about the opportunity to contribute to the team. Please let me know if you need anything else from me as you move forward in the process.
 
 Best regards,
-[Your Name]`
+[Your Name]`,
   },
   {
     id: 'networking',
@@ -52,8 +59,8 @@ I came across your profile and was impressed by your work at [Company]. I am cur
 Would you be open to a brief 15-minute chat sometime next week?
 
 Thanks,
-[Your Name]`
-  }
+[Your Name]`,
+  },
 ];
 
 export default function Inbox() {
@@ -77,19 +84,19 @@ export default function Inbox() {
 
   const handleGenerateDraft = async () => {
     if (!selectedAppId) return;
-    const app = applications.find(a => a.id === selectedAppId);
+    const app = applications.find((a) => a.id === selectedAppId);
     if (!app) return;
 
     setIsDrafting(true);
     try {
-      const res = await fetch('/api/gemini/draft-outreach', {
+      const res = await apiFetch(apiUrl('/api/gemini/draft-outreach'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           jdText: app.rawJobDescription,
           profileData: profile,
-          messageType: composeType
-        })
+          messageType: composeType,
+        }),
       });
       const data = await res.json();
       setComposeSubject(data.subject || '');
@@ -107,7 +114,7 @@ export default function Inbox() {
   const handleSend = async () => {
     const confirmed = window.confirm(`Are you sure you want to send this email to ${composeTo}?`);
     if (!confirmed) return;
-    
+
     setIsSending(true);
     try {
       await sendEmail(composeTo, composeSubject, composeBody.replace(/\n/g, '<br>'));
@@ -128,11 +135,12 @@ export default function Inbox() {
     setIsSummarizing(true);
     try {
       let emailContent = msg.snippet;
-      
+
       // Try to get full text if available
       if (msg.payload) {
         if (msg.payload.parts) {
-          const textPart = msg.payload.parts.find((p: any) => p.mimeType === 'text/plain') || msg.payload.parts[0];
+          const textPart =
+            msg.payload.parts.find((p: any) => p.mimeType === 'text/plain') || msg.payload.parts[0];
           if (textPart?.body?.data) {
             emailContent = atob(textPart.body.data.replace(/-/g, '+').replace(/_/g, '/'));
           }
@@ -141,10 +149,10 @@ export default function Inbox() {
         }
       }
 
-      const res = await fetch('/api/gemini/summarize-email', {
+      const res = await apiFetch(apiUrl('/api/gemini/summarize-email'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ emailContent })
+        body: JSON.stringify({ emailContent }),
       });
       const data = await res.json();
       setSummaryData(data);
@@ -181,16 +189,15 @@ export default function Inbox() {
     <div className="h-full flex flex-col p-4 md:p-8 overflow-y-auto md:overflow-hidden">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 md:mb-8 gap-4 flex-shrink-0">
         <div>
-          <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">Recruiter Hub</h1>
-          <p className="text-sm md:text-base text-slate-500 dark:text-slate-400 mt-1">Manage communications and AI outreach</p>
+          <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">
+            Recruiter Hub
+          </h1>
+          <p className="text-sm md:text-base text-slate-500 dark:text-slate-400 mt-1">
+            Manage communications and AI outreach
+          </p>
         </div>
-        <Button 
-          variant="outline"
-          size="icon"
-          onClick={fetchMessages}
-          disabled={gmailLoading}
-        >
-          <RefreshCw size={20} className={cn(gmailLoading && "animate-spin")} />
+        <Button variant="outline" size="icon" onClick={fetchMessages} disabled={gmailLoading}>
+          <RefreshCw size={20} className={cn(gmailLoading && 'animate-spin')} />
         </Button>
       </div>
 
@@ -205,22 +212,29 @@ export default function Inbox() {
           <div className="flex-1 overflow-y-auto p-2">
             {gmailLoading ? (
               <div className="p-8 text-center text-slate-500 flex flex-col items-center">
-                 <RefreshCw size={24} className="animate-spin mb-3 text-indigo-400" />
-                 Loading messages...
+                <RefreshCw size={24} className="animate-spin mb-3 text-indigo-400" />
+                Loading messages...
               </div>
             ) : messages.length === 0 ? (
               <div className="p-8 text-center text-slate-500">No messages found.</div>
             ) : (
               <div className="space-y-1">
                 {messages.map((msg) => (
-                  <div key={msg.id} className="p-4 rounded-xl hover:bg-slate-200 dark:hover:bg-[#334155]/50 transition-colors cursor-pointer border border-transparent hover:border-slate-200 dark:hover:border-[#334155] group">
+                  <div
+                    key={msg.id}
+                    className="p-4 rounded-xl hover:bg-slate-200 dark:hover:bg-[#334155]/50 transition-colors cursor-pointer border border-transparent hover:border-slate-200 dark:hover:border-[#334155] group"
+                  >
                     <div className="flex justify-between items-start mb-1">
-                      <span className="font-medium text-slate-700 dark:text-slate-200 truncate pr-4">{msg.from.split('<')[0]}</span>
+                      <span className="font-medium text-slate-700 dark:text-slate-200 truncate pr-4">
+                        {msg.from.split('<')[0]}
+                      </span>
                       <span className="text-xs text-slate-500 whitespace-nowrap">
                         {msg.date ? formatDistanceToNow(new Date(msg.date)) : ''} ago
                       </span>
                     </div>
-                    <p className="text-sm text-slate-600 dark:text-slate-300 truncate">{msg.subject}</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-300 truncate">
+                      {msg.subject}
+                    </p>
                     <p className="text-xs text-slate-500 truncate mt-1 mb-3">{msg.snippet}</p>
                     <div className="flex justify-end mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button
@@ -252,26 +266,32 @@ export default function Inbox() {
           </div>
           <div className="p-6 flex-1 overflow-y-auto space-y-5">
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Target Application</label>
-              <select 
+              <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                Target Application
+              </label>
+              <select
                 value={selectedAppId}
                 onChange={(e) => setSelectedAppId(e.target.value)}
                 className="w-full bg-slate-100 dark:bg-[#0F172A] border border-slate-200 dark:border-[#334155] rounded-lg px-4 py-2.5 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               >
                 <option value="">Select an application...</option>
-                {applications.map(app => (
-                  <option key={app.id} value={app.id}>{app.companyName} - {app.jobTitle}</option>
+                {applications.map((app) => (
+                  <option key={app.id} value={app.id}>
+                    {app.companyName} - {app.jobTitle}
+                  </option>
                 ))}
               </select>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Message Type</label>
+              <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                Message Type
+              </label>
               <div className="flex flex-col sm:flex-row bg-slate-100 dark:bg-[#0F172A] p-1 rounded-lg border border-slate-200 dark:border-[#334155] gap-1 sm:gap-0">
                 {(['REFERRAL', 'FOLLOWUP', 'THANKYOU'] as const).map((type) => (
                   <Button
                     key={type}
-                    variant={composeType === type ? "secondary" : "ghost"}
+                    variant={composeType === type ? 'secondary' : 'ghost'}
                     size="sm"
                     onClick={() => setComposeType(type)}
                     className="flex-1"
@@ -298,9 +318,9 @@ export default function Inbox() {
                   <FileText size={14} className="inline mr-1" />
                   Quick Templates
                 </span>
-                <select 
+                <select
                   onChange={(e) => {
-                    const tpl = EMAIL_TEMPLATES.find(t => t.id === e.target.value);
+                    const tpl = EMAIL_TEMPLATES.find((t) => t.id === e.target.value);
                     if (tpl) {
                       setComposeSubject(tpl.subject);
                       setComposeBody(tpl.body);
@@ -310,27 +330,29 @@ export default function Inbox() {
                   className="w-full sm:flex-1 bg-slate-100 dark:bg-[#0F172A] border border-slate-200 dark:border-[#334155] rounded-lg px-3 py-2 sm:py-1.5 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 >
                   <option value="">Select a template to autofill...</option>
-                  {EMAIL_TEMPLATES.map(tpl => (
-                    <option key={tpl.id} value={tpl.id}>{tpl.name}</option>
+                  {EMAIL_TEMPLATES.map((tpl) => (
+                    <option key={tpl.id} value={tpl.id}>
+                      {tpl.name}
+                    </option>
                   ))}
                 </select>
               </div>
-              <Input 
-                type="text" 
+              <Input
+                type="text"
                 placeholder="To (Email Address)"
                 value={composeTo}
-                onChange={e => setComposeTo(e.target.value)}
+                onChange={(e) => setComposeTo(e.target.value)}
               />
-              <Input 
-                type="text" 
+              <Input
+                type="text"
                 placeholder="Subject"
                 value={composeSubject}
-                onChange={e => setComposeSubject(e.target.value)}
+                onChange={(e) => setComposeSubject(e.target.value)}
               />
-              <Textarea 
+              <Textarea
                 placeholder="Message Body"
                 value={composeBody}
-                onChange={e => setComposeBody(e.target.value)}
+                onChange={(e) => setComposeBody(e.target.value)}
                 rows={8}
                 className="resize-none leading-relaxed"
               />
@@ -358,17 +380,15 @@ export default function Inbox() {
                   <Sparkles className="text-indigo-400" size={20} />
                   AI Thread Summary
                 </h3>
-                <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Generated from your email communication</p>
+                <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
+                  Generated from your email communication
+                </p>
               </div>
-              <Button 
-                variant="ghost"
-                size="icon"
-                onClick={() => setSummaryMsgId(null)}
-              >
+              <Button variant="ghost" size="icon" onClick={() => setSummaryMsgId(null)}>
                 <X size={20} />
               </Button>
             </div>
-            
+
             <div className="flex-1 overflow-y-auto p-6">
               {isSummarizing ? (
                 <div className="h-full flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 py-12">
@@ -378,19 +398,29 @@ export default function Inbox() {
               ) : summaryData ? (
                 <div className="space-y-6">
                   <div>
-                    <h4 className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">Overview</h4>
+                    <h4 className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">
+                      Overview
+                    </h4>
                     <p className="text-slate-700 dark:text-slate-200 leading-relaxed bg-slate-100/50 dark:bg-[#0F172A]/50 p-4 rounded-xl border border-slate-200 dark:border-[#334155]">
                       {summaryData.summary}
                     </p>
                   </div>
-                  
+
                   {summaryData.actionItems && summaryData.actionItems.length > 0 && (
                     <div>
-                      <h4 className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">Action Items</h4>
+                      <h4 className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">
+                        Action Items
+                      </h4>
                       <ul className="space-y-3">
                         {summaryData.actionItems.map((item: string, i: number) => (
-                          <li key={i} className="flex items-start bg-slate-100/50 dark:bg-[#0F172A]/50 p-3 rounded-xl border border-slate-200 dark:border-[#334155]">
-                            <CheckSquare size={18} className="text-emerald-400 mt-0.5 mr-3 flex-shrink-0" />
+                          <li
+                            key={i}
+                            className="flex items-start bg-slate-100/50 dark:bg-[#0F172A]/50 p-3 rounded-xl border border-slate-200 dark:border-[#334155]"
+                          >
+                            <CheckSquare
+                              size={18}
+                              className="text-emerald-400 mt-0.5 mr-3 flex-shrink-0"
+                            />
                             <span className="text-slate-700 dark:text-slate-200">{item}</span>
                           </li>
                         ))}
@@ -399,7 +429,9 @@ export default function Inbox() {
                   )}
                 </div>
               ) : (
-                <div className="text-rose-400 text-center py-8">Failed to generate summary. Please try again.</div>
+                <div className="text-rose-400 text-center py-8">
+                  Failed to generate summary. Please try again.
+                </div>
               )}
             </div>
           </div>

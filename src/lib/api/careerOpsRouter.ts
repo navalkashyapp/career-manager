@@ -1,16 +1,19 @@
 import express from 'express';
-import { evaluateJob } from '../../../career-ops/gemini-eval.mjs';
+import { adminDb, adminAuth } from '../firebaseAdmin';
+import { GoogleGenAI } from '@google/genai';
+import { OrchestratorAgent, JobEvaluation, TailorResult } from '../../agents/OrchestratorAgent';
+import { UserProfile } from '../../agents/ResumeTailorAgent';
+import { GEMINI_MODELS } from '../../config/gemini';
+
 import { COMMANDS as tracker } from '../../../career-ops/tracker.mjs';
 import { DataParserService } from '../services/DataParserService';
 import path from 'path';
-import { GoogleGenAI } from '@google/genai';
-import { OutreachAgent } from '../agents/OutreachAgent';
 import { z } from 'zod';
 import { execFile } from 'child_process';
 import util from 'util';
-import { withExponentialBackoff } from '../utils/withExponentialBackoff';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { existsSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -18,6 +21,33 @@ const __dirname = dirname(__filename);
 const execFileAsync = util.promisify(execFile);
 
 export const careerOpsRouter = express.Router();
+
+// Authentication Middleware
+careerOpsRouter.use(async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized: Missing or invalid Authorization header' });
+  }
+
+  const token = authHeader.split('Bearer ')[1];
+  try {
+    const decodedToken = await adminAuth.verifyIdToken(token);
+
+    // Restrict to ONLY the authorized user
+    const allowedEmails = ['kashyapnaval35@gmail.com', 'navalkashyaap@gmail.com'];
+    if (!allowedEmails.includes(decodedToken.email || '')) {
+      return res.status(403).json({ error: 'Forbidden: Email not authorized' });
+    }
+
+    // Pass user info to request
+    (req as any).user = decodedToken;
+    next();
+  } catch (error) {
+    console.error('Token verification failed:', error);
+    return res.status(401).json({ error: 'Unauthorized: Invalid token' });
+  }
+});
+
 const dataParser = new DataParserService(path.resolve(process.cwd(), 'career-ops'));
 const careerOpsPath = path.resolve(process.cwd(), 'career-ops');
 
@@ -101,67 +131,128 @@ careerOpsRouter.post('/tracker/update', async (req, res) => {
 // ---------------------------------------------------------------------------
 // SSE Endpoint: Long-running AI Outreach Generation
 // ---------------------------------------------------------------------------
-const OutreachSchema = z.object({
-  jdText: z.string(),
-  profileData: z.any(),
-  messageType: z.string(),
-});
+// ---------------------------------------------------------------------------
+// Helper functions for Agents V2 Orchestration
+function getOrchestrator(): OrchestratorAgent {
+  const apiKey =
+    process.env.GEMINI_API_KEY ||
+    process.env.GEMINI_API_KEY_1 ||
+    process.env.GEMINI_API_KEY_2 ||
+    '';
+  const aiClient = new GoogleGenAI({ apiKey });
+  return new OrchestratorAgent(aiClient, { debug: true });
+}
 
-careerOpsRouter.post('/outreach-stream', async (req, res) => {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
-
-  const sendEvent = (event: string, data: any) => {
-    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+function extractCandidateData(profileData: any): {
+  userProfile: UserProfile;
+  masterCvMarkdown: string;
+} {
+  const p = profileData || {};
+  const userProfile: UserProfile = {
+    fullName: p.name || p.fullName || 'Candidate',
+    headline: p.headline || p.targetLevel || '',
+    voiceSample: p.voiceSample || '',
+    location: p.location || '',
+    email: p.email || '',
+    phone: p.phone || '',
   };
+  const masterCvMarkdown =
+    p.masterCvMarkdown || p.resumeText || (typeof p === 'string' ? p : JSON.stringify(p, null, 2));
+  return { userProfile, masterCvMarkdown };
+}
 
-  try {
-    const payload = OutreachSchema.parse(req.body);
-    sendEvent('progress', { phase: 'Analyzing Job Description...', percentage: 20 });
+function buildEvaluationReportMarkdown(evalResult: JobEvaluation): string {
+  const dims = evalResult.dimensions;
+  return [
+    `# Evaluation Report: ${evalResult.jobTitle || 'Role'} at ${evalResult.companyName || 'Company'}`,
+    '',
+    `**Recommendation:** \`${evalResult.recommendation?.toUpperCase() || 'EVALUATED'}\`  `,
+    `**Overall Match Score:** **${typeof evalResult.overallScore === 'number' ? evalResult.overallScore.toFixed(1) : evalResult.overallScore} / 5.0**`,
+    '',
+    '## 📋 Executive Summary',
+    evalResult.jobSummary || 'No summary provided.',
+    '',
+    '## 📊 Score Breakdown',
+    evalResult.scoreBreakdown || '',
+    '',
+    '## 🔍 Dimension Analysis',
+    `### 1. Skill Alignment (${dims?.skillAlignment?.grade || 'N/A'})`,
+    ...(dims?.skillAlignment?.evidence?.length
+      ? dims.skillAlignment.evidence.map((e: string) => `- ${e}`)
+      : ['- No explicit evidence recorded']),
+    dims?.skillAlignment?.note ? `\n> ${dims.skillAlignment.note}` : '',
+    '',
+    `### 2. Culture & Leadership Fit (${dims?.cultureFit?.grade || 'N/A'})`,
+    ...(dims?.cultureFit?.evidence?.length
+      ? dims.cultureFit.evidence.map((e: string) => `- ${e}`)
+      : ['- Standard leadership expectations']),
+    dims?.cultureFit?.note ? `\n> ${dims.cultureFit.note}` : '',
+    '',
+    `### 3. Growth Potential (${dims?.growthPotential?.grade || 'N/A'})`,
+    ...(dims?.growthPotential?.evidence?.length
+      ? dims.growthPotential.evidence.map((e: string) => `- ${e}`)
+      : ['- Unspecified']),
+    dims?.growthPotential?.note ? `\n> ${dims.growthPotential.note}` : '',
+    '',
+    `### 4. Compensation & Policy (${dims?.compensation?.grade || 'N/A'})`,
+    ...(dims?.compensation?.evidence?.length
+      ? dims.compensation.evidence.map((e: string) => `- ${e}`)
+      : ['- Market competitive or unlisted']),
+    dims?.compensation?.note ? `\n> ${dims.compensation.note}` : '',
+    '',
+    '## ⚠️ Dealbreakers & Blockers',
+    evalResult.dealbreakers?.length
+      ? evalResult.dealbreakers.map((d: string) => `- 🚫 **${d}**`).join('\n')
+      : '✅ No dealbreakers or hard blockers detected.',
+    '',
+    '## 🎯 Gap Analysis',
+    evalResult.gaps?.length
+      ? evalResult.gaps
+          .map(
+            (g: any) =>
+              `- **[${g.severity?.toUpperCase() || 'GAP'}]** ${g.gap}\n  - *Mitigation strategy:* ${g.fixable}`,
+          )
+          .join('\n')
+      : '✅ No critical gaps identified.',
+    '',
+    '## 💡 Recommendation Rationale',
+    ...(evalResult.recommendationReasons?.length
+      ? evalResult.recommendationReasons.map((r: string) => `- ${r}`)
+      : ['- Direct match against candidate positioning']),
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
 
-    // Simulate streaming phases
-    setTimeout(
-      () => sendEvent('progress', { phase: 'Matching Candidate Profile...', percentage: 50 }),
-      1500,
-    );
-    setTimeout(
-      () => sendEvent('progress', { phase: 'Drafting Outreach...', percentage: 80 }),
-      3000,
-    );
-
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    const agent = new OutreachAgent(ai);
-    const result = await agent.draft(payload, (attempt, delayMs, timeElapsedMs, maxTimeoutMs) => {
-      const remainingSeconds = Math.round((maxTimeoutMs - timeElapsedMs) / 1000);
-      sendEvent('progress', {
-        phase: `API Overloaded. Retrying attempt ${attempt}... (${remainingSeconds}s remaining)`,
-        percentage: 50,
-      });
-    });
-
-    sendEvent('progress', { phase: 'Complete', percentage: 100 });
-    sendEvent('result', result);
-    res.end();
-  } catch (error: any) {
-    sendEvent('error', { message: error.message });
-    res.end();
-  }
-});
+function formatEvaluationResponse(evalResult: JobEvaluation, rawJobDescription: string) {
+  const reportMarkdown = buildEvaluationReportMarkdown(evalResult);
+  return {
+    ...evalResult,
+    role: evalResult.jobTitle || 'Unknown Role',
+    company: evalResult.companyName || 'Unknown Company',
+    score: evalResult.overallScore || 0,
+    archetype: evalResult.recommendation || 'Evaluated',
+    legitimacy: (evalResult.dealbreakers?.length ?? 0) === 0 ? 'High' : 'Review Required',
+    evaluationText: reportMarkdown,
+    report: reportMarkdown,
+    notes: reportMarkdown,
+    rawJobDescription: rawJobDescription || '',
+  };
+}
 
 // ---------------------------------------------------------------------------
-// SSE Endpoint: Long-running AI Job Evaluation
+// SSE Endpoint: AI Job Evaluation (Agents V2: JobEvaluationAgent)
 // ---------------------------------------------------------------------------
-const EvaluateSchema = z.object({
+const EvaluateAsyncSchema = z.object({
+  docId: z.string(),
+  userId: z.string(),
   jdText: z.string().optional(),
   url: z.string().url().optional(),
   modelName: z.string().optional(),
   profileData: z.any().optional(),
 });
 
-careerOpsRouter.post('/evaluate-stream', async (req, res) => {
-  // Setup SSE headers
+careerOpsRouter.post('/evaluate', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -172,39 +263,78 @@ careerOpsRouter.post('/evaluate-stream', async (req, res) => {
   };
 
   try {
-    const { jdText, modelName, profileData } = EvaluateSchema.parse(req.body);
+    const { docId, userId, jdText, profileData } = EvaluateAsyncSchema.parse(req.body);
+    if (!jdText || jdText.trim().length < 20) {
+      throw new Error('Please provide sufficient Job Description text to evaluate.');
+    }
 
-    sendEvent('progress', { phase: 'Initializing evaluation...', percentage: 10 });
+    const docRef = adminDb
+      .collection('users')
+      .doc(userId)
+      .collection('jobsearchhistory')
+      .doc(docId);
 
-    // Call the newly exported `evaluateJob` function
-    const result = await evaluateJob({
-      jdText,
-      modelName,
-      profileData,
-      saveReport: true,
-      onProgress: (phase: string, percentage: number) => {
-        sendEvent('progress', { phase, percentage });
-      },
-      onRetry: (attempt: number, delayMs: number, timeElapsedMs: number, maxTimeoutMs: number) => {
-        const remainingSeconds = Math.round((maxTimeoutMs - timeElapsedMs) / 1000);
-        sendEvent('progress', {
-          phase: `API Overloaded. Retrying attempt ${attempt}... (${remainingSeconds}s remaining)`,
-          percentage: 50,
-        });
-      },
+    sendEvent('progress', { phase: 'Initializing Agents V2 evaluation...', percentage: 15 });
+
+    const orchestrator = getOrchestrator();
+    const { userProfile, masterCvMarkdown } = extractCandidateData(profileData);
+
+    sendEvent('progress', {
+      phase: 'Analyzing dimensions, culture fit & gap evidence...',
+      percentage: 50,
     });
 
-    sendEvent('progress', { phase: 'Complete', percentage: 100 });
-    sendEvent('result', result);
+    const evalResult = (await orchestrator.handleAction('evaluate_job', {
+      userProfile,
+      masterCvMarkdown,
+      jobDescription: jdText,
+    })) as JobEvaluation;
+
+    const formattedResult = formatEvaluationResponse(evalResult, jdText);
+
+    sendEvent('progress', { phase: 'Saving to Firestore...', percentage: 95 });
+    await docRef.set(
+      {
+        id: docId,
+        timestamp: Date.now(),
+        input: jdText || '',
+        status: 'completed',
+        result: formattedResult,
+        progressPhase: 'Complete',
+        progressPercent: 100,
+      },
+      { merge: true },
+    );
+
+    sendEvent('firestore_ready', { docId, result: formattedResult });
     res.end();
-  } catch (error: any) {
-    sendEvent('error', { message: error.message });
+  } catch (err: any) {
+    console.error('[evaluate] Error:', err);
+    try {
+      const { docId, userId } = EvaluateAsyncSchema.parse(req.body);
+      const docRef = adminDb
+        .collection('users')
+        .doc(userId)
+        .collection('jobsearchhistory')
+        .doc(docId);
+      await docRef
+        .set(
+          {
+            status: 'error',
+            error: err.message,
+            progressPhase: 'Error',
+            progressPercent: 0,
+          },
+          { merge: true },
+        )
+        .catch(console.error);
+    } catch (e) {}
+    sendEvent('error', { message: err.message });
     res.end();
   }
 });
 
-careerOpsRouter.post('/evaluate-url-stream', async (req, res) => {
-  // Setup SSE headers
+careerOpsRouter.post('/evaluate-url', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -215,12 +345,18 @@ careerOpsRouter.post('/evaluate-url-stream', async (req, res) => {
   };
 
   try {
-    const { url, modelName, profileData } = EvaluateSchema.parse(req.body);
+    const { docId, userId, url, profileData } = EvaluateAsyncSchema.parse(req.body);
     if (!url) {
       throw new Error('URL is required for this endpoint');
     }
 
-    sendEvent('progress', { phase: 'Scraping Job Description from URL...', percentage: 10 });
+    const docRef = adminDb
+      .collection('users')
+      .doc(userId)
+      .collection('jobsearchhistory')
+      .doc(docId);
+
+    sendEvent('progress', { phase: 'Scraping Job Description from URL...', percentage: 15 });
 
     const { JobScraperService } = await import('../services/JobScraperService.js');
     const scrapedText = await JobScraperService.scrapeJobPosting(url);
@@ -229,44 +365,161 @@ careerOpsRouter.post('/evaluate-url-stream', async (req, res) => {
       throw new Error('Failed to extract sufficient text from the provided URL.');
     }
 
-    sendEvent('progress', { phase: 'Initializing evaluation...', percentage: 30 });
-
-    // Call evaluateJob
-    const result = await evaluateJob({
-      jdText: scrapedText,
-      modelName,
-      profileData,
-      saveReport: true,
-      onProgress: (phase: string, percentage: number) => {
-        sendEvent('progress', { phase, percentage });
-      },
-      onRetry: (attempt: number, delayMs: number, timeElapsedMs: number, maxTimeoutMs: number) => {
-        const remainingSeconds = Math.round((maxTimeoutMs - timeElapsedMs) / 1000);
-        sendEvent('progress', {
-          phase: `API Overloaded. Retrying attempt ${attempt}... (${remainingSeconds}s remaining)`,
-          percentage: 50,
-        });
-      },
+    sendEvent('progress', {
+      phase: 'Evaluating with Agents V2 JobEvaluationAgent...',
+      percentage: 45,
     });
 
-    // Attach the scraped text so the frontend can save it to Firestore
-    result.rawJobDescription = scrapedText;
+    const orchestrator = getOrchestrator();
+    const { userProfile, masterCvMarkdown } = extractCandidateData(profileData);
 
-    // Sync the DB to reflect the new row
-    sendEvent('progress', { phase: 'Syncing Tracker Database...', percentage: 95 });
-    await execFileAsync(process.execPath, ['tracker.mjs', 'sync'], { cwd: careerOpsPath });
+    const evalResult = (await orchestrator.handleAction('evaluate_job', {
+      userProfile,
+      masterCvMarkdown,
+      jobDescription: scrapedText,
+    })) as JobEvaluation;
 
-    sendEvent('progress', { phase: 'Complete', percentage: 100 });
-    sendEvent('result', result);
+    const formattedResult = formatEvaluationResponse(evalResult, scrapedText);
+
+    sendEvent('progress', { phase: 'Syncing Tracker Database...', percentage: 90 });
+    try {
+      await execFileAsync(process.execPath, ['tracker.mjs', 'sync'], { cwd: careerOpsPath });
+    } catch (syncErr) {
+      console.warn('tracker.mjs sync non-critical warning:', syncErr);
+    }
+
+    sendEvent('progress', { phase: 'Saving to Firestore...', percentage: 95 });
+    await docRef.set(
+      {
+        id: docId,
+        timestamp: Date.now(),
+        input: url || '',
+        status: 'completed',
+        result: formattedResult,
+        progressPhase: 'Complete',
+        progressPercent: 100,
+      },
+      { merge: true },
+    );
+
+    sendEvent('firestore_ready', { docId, result: formattedResult });
     res.end();
-  } catch (error: any) {
-    sendEvent('error', { message: error.message });
+  } catch (err: any) {
+    console.error('[evaluate-url] Error:', err);
+    try {
+      const { docId, userId } = EvaluateAsyncSchema.parse(req.body);
+      const docRef = adminDb
+        .collection('users')
+        .doc(userId)
+        .collection('jobsearchhistory')
+        .doc(docId);
+      await docRef
+        .set(
+          {
+            status: 'error',
+            error: err.message,
+            progressPhase: 'Error',
+            progressPercent: 0,
+          },
+          { merge: true },
+        )
+        .catch(console.error);
+    } catch (e) {}
+    sendEvent('error', { message: err.message });
     res.end();
   }
 });
 
 // ---------------------------------------------------------------------------
-// SSE Endpoint: Long-running AI Tailor Resume
+// SSE Endpoint: Extract Job Details from URL using Antigravity (agy)
+// ---------------------------------------------------------------------------
+const ExtractJobUrlSchema = z.object({
+  url: z.string().optional(),
+  jdText: z.string().optional(),
+});
+
+careerOpsRouter.post('/extract-job-url', async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const sendEvent = (event: string, data: any) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    const { url, jdText } = ExtractJobUrlSchema.parse(req.body);
+    let jobDescriptionText = jdText || '';
+
+    if (url && !jobDescriptionText) {
+      sendEvent('progress', { phase: 'Scraping job description from URL...', percentage: 20 });
+      const { JobScraperService } = await import('../services/JobScraperService.js');
+      jobDescriptionText = await JobScraperService.scrapeJobPosting(url);
+    }
+
+    if (!jobDescriptionText || jobDescriptionText.trim().length < 40) {
+      throw new Error(
+        'Unable to extract sufficient job text from this URL. Please verify the link or paste the text directly.',
+      );
+    }
+
+    sendEvent('progress', {
+      phase: 'Extracting role profile & company with Antigravity Agents V2...',
+      percentage: 60,
+    });
+
+    const orchestrator = getOrchestrator();
+
+    console.log('\n=== AGY REQUEST (Extract Job) via Agents V2 ===\n');
+    const extracted = (await orchestrator.handleAction('parse_job_page', {
+      domSnippet: jobDescriptionText,
+    })) as any;
+    console.log(
+      '\n=== AGY RESPONSE (Extract Job) ===\n',
+      extracted,
+      '\n=================================\n',
+    );
+
+    sendEvent('progress', { phase: 'Extraction complete!', percentage: 100 });
+    sendEvent('done', {
+      companyName: extracted.companyName || 'Unknown Company',
+      companyDescription: extracted.companyDescription || '',
+      roleTitle: extracted.roleTitle || 'Unknown Title',
+      jobTitle: extracted.roleTitle || 'Unknown Title',
+      roleDescription: extracted.roleDescription || '',
+      jobSummary: extracted.roleDescription || extracted.jobSummary || '',
+      location: extracted.location || '',
+      salary: extracted.salary || { raw: extracted.salaryRange || '' },
+      salaryRange: extracted.salary?.raw || '',
+      targetLevel: extracted.experienceLevel || '',
+      experienceLevel: extracted.experienceLevel || '',
+      department: extracted.department || '',
+      requirements: extracted.requirements || [],
+      keyRequirements: extracted.requirements || [],
+      niceToHaves: extracted.niceToHaves || [],
+      qualifications: extracted.qualifications || [],
+      responsibilities: extracted.responsibilities || [],
+      benefits: extracted.benefits || [],
+      remotePolicy: extracted.remotePolicy || 'unknown',
+      employmentType: extracted.employmentType || '',
+      rawJobDescription: jobDescriptionText,
+      jobUrl: url || extracted.applicationUrl || '',
+      pageType: extracted.pageType || 'unknown',
+      detectedPostings: extracted.detectedPostings || [],
+      fieldConfidence: extracted.fieldConfidence || {},
+      warnings: extracted.warnings || [],
+    });
+    res.end();
+  } catch (error: any) {
+    console.error('[extract-job-url] Error:', error);
+    sendEvent('error', { message: error.message || 'Failed to extract job details' });
+    res.end();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// SSE Endpoint: Long-running AI Tailor Resume (Agents V2: ResumeTailorAgent)
 // ---------------------------------------------------------------------------
 const TailorSchema = z.object({
   jdText: z.string(),
@@ -285,62 +538,164 @@ careerOpsRouter.post('/tailor-stream', async (req, res) => {
 
   try {
     const payload = TailorSchema.parse(req.body);
-    sendEvent('progress', { phase: 'Analyzing Job Description...', percentage: 10 });
+    sendEvent('progress', { phase: 'Analyzing Job Description & Profile...', percentage: 20 });
 
-    // Simulate streaming phases
-    setTimeout(
-      () => sendEvent('progress', { phase: 'Identifying Key Skills...', percentage: 40 }),
-      1500,
-    );
-    setTimeout(
-      () => sendEvent('progress', { phase: 'Rewriting Resume Bullets...', percentage: 70 }),
-      3000,
-    );
-    setTimeout(
-      () => sendEvent('progress', { phase: 'Finalizing formatting...', percentage: 90 }),
-      4500,
-    );
+    const orchestrator = getOrchestrator();
+    const { userProfile, masterCvMarkdown } = extractCandidateData(payload.profileData);
 
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    // Quick inline tailor generation
-    const prompt = `
-You are an expert technical recruiter.
-Job Description: ${payload.jdText}
-Profile Data: ${JSON.stringify(payload.profileData)}
+    sendEvent('progress', {
+      phase: 'Synthesizing tailored resume with Agents V2...',
+      percentage: 55,
+    });
 
-Rewrite the candidate's profile to better match the job description.
-Return a JSON object with:
-{
-  "tailoredSummary": "A tailored professional summary",
-  "keySkills": ["skill 1", "skill 2", "skill 3"]
-}
-`;
-    const response = await withExponentialBackoff(
-      () =>
-        ai.models.generateContent({
-          model: 'gemini-3.5-flash',
-          contents: prompt,
-          config: { responseMimeType: 'application/json' },
-        }),
-      600000,
-      (attempt, delayMs, timeElapsedMs, maxTimeoutMs) => {
-        const remainingSeconds = Math.round((maxTimeoutMs - timeElapsedMs) / 1000);
-        sendEvent('progress', {
-          phase: `API Overloaded. Retrying attempt ${attempt}... (${remainingSeconds}s remaining)`,
-          percentage: 50,
-        });
-      },
+    console.log('\n=== AGY REQUEST (Tailor Resume) via Orchestrator ===\n');
+    const tailorOutput = (await orchestrator.handleAction('tailor_resume', {
+      userProfile,
+      masterCvMarkdown,
+      jobDescription: payload.jdText,
+    })) as any;
+
+    console.log(
+      '\n=== AGY RESPONSE (Tailor Resume) ===\n',
+      tailorOutput,
+      '\n===================================\n',
     );
 
-    const result = JSON.parse(response.text || '{}');
-
-    setTimeout(() => {
-      sendEvent('progress', { phase: 'Complete', percentage: 100 });
-      sendEvent('result', result);
-      res.end();
-    }, 6000);
-  } catch (error: any) {
-    sendEvent('error', { message: error.message });
+    sendEvent('progress', { phase: 'Complete', percentage: 100 });
+    // Returns full structured result (or .result property if nested)
+    sendEvent('result', tailorOutput.result || tailorOutput);
     res.end();
+  } catch (error: any) {
+    console.error('[tailor-stream] Error:', error);
+    sendEvent('error', { message: error.message || 'Failed to tailor resume' });
+    res.end();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Endpoint: AI Outreach Generation (Agents V2: OutreachAgent)
+// ---------------------------------------------------------------------------
+const OutreachSchema = z.object({
+  jdText: z.string(),
+  profileData: z.any().optional(),
+  messageType: z.string().optional(),
+  recipient: z.any().optional(),
+  channel: z.enum(['linkedin-connection-note', 'linkedin-dm', 'cold-email']).optional(),
+});
+
+careerOpsRouter.post('/draft-outreach', async (req, res) => {
+  try {
+    const { jdText, profileData, messageType, recipient, channel } = OutreachSchema.parse(req.body);
+    const orchestrator = getOrchestrator();
+    const { userProfile, masterCvMarkdown } = extractCandidateData(profileData);
+
+    const targetChannel =
+      channel ||
+      (messageType?.toLowerCase().includes('linkedin') ? 'linkedin-connection-note' : 'cold-email');
+    const targetRecipient = recipient || {
+      name: 'Hiring Manager',
+      role: 'Hiring Manager',
+      company: 'Target Company',
+    };
+
+    const draft = (await orchestrator.handleAction('draft_outreach', {
+      userProfile,
+      masterCvMarkdown,
+      jobDescription: jdText,
+      recipient: targetRecipient,
+      channel: targetChannel,
+    })) as any;
+
+    const recommended =
+      (draft.variants || []).find((v: any) => v.angle === draft.recommendedVariant) ||
+      draft.variants?.[0];
+
+    res.json({
+      ...draft,
+      subject: recommended?.subject || 'Re: Application',
+      body: recommended?.body || '',
+      finalMessage: {
+        subject: recommended?.subject || 'Re: Application',
+        body: recommended?.body || '',
+      },
+      draft: recommended,
+    });
+  } catch (error: any) {
+    console.error('[draft-outreach] Error:', error);
+    res.status(500).json({ error: error.message || 'Failed to draft outreach' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Endpoint: AI Interview Prep (Agents V2: InterviewCoachAgent)
+// ---------------------------------------------------------------------------
+const PrepSchema = z.object({
+  jdText: z.string(),
+  companyName: z.string().optional(),
+  profileData: z.any().optional(),
+  daysAvailable: z.number().optional(),
+});
+
+careerOpsRouter.post('/prep-interview', async (req, res) => {
+  try {
+    const { jdText, companyName, profileData, daysAvailable } = PrepSchema.parse(req.body);
+    const orchestrator = getOrchestrator();
+    const { userProfile, masterCvMarkdown } = extractCandidateData(profileData);
+
+    const plan = (await orchestrator.handleAction('interview_prep_plan', {
+      userProfile,
+      masterCvMarkdown,
+      jobDescription: jdText,
+      daysAvailable: daysAvailable || 7,
+    })) as any;
+
+    // Synthesize compatibility questions for legacy consumers (PrepModal, JobDetailsModal)
+    const systemDesignQuestions = (plan.blocks || [])
+      .filter(
+        (b: any) =>
+          b.focusTopic?.toLowerCase().includes('system') ||
+          b.focusTopic?.toLowerCase().includes('design') ||
+          b.focusTopic?.toLowerCase().includes('technical'),
+      )
+      .map((b: any) => ({
+        question: b.drills?.[0] || b.whyItMatters,
+        focusAreas: b.resourceQueries || [b.focusTopic],
+      }));
+
+    const behavioralPrompts = (plan.blocks || [])
+      .filter(
+        (b: any) =>
+          !b.focusTopic?.toLowerCase().includes('system') &&
+          !b.focusTopic?.toLowerCase().includes('design'),
+      )
+      .map((b: any) => ({
+        prompt: b.drills?.[0] || b.whyItMatters,
+        whyTheyAskThis: b.whyItMatters || 'Evaluates candidate competence and alignment.',
+      }));
+
+    res.json({
+      ...plan,
+      systemDesignQuestions:
+        systemDesignQuestions.length > 0
+          ? systemDesignQuestions
+          : [
+              {
+                question: `Design a scalable architecture for ${companyName || 'the role'}'s core services.`,
+                focusAreas: ['Scalability', 'Fault Tolerance'],
+              },
+            ],
+      behavioralPrompts:
+        behavioralPrompts.length > 0
+          ? behavioralPrompts
+          : [
+              {
+                prompt: `Tell me about a time you handled conflict on a technical project.`,
+                whyTheyAskThis: 'Evaluates team collaboration and conflict resolution.',
+              },
+            ],
+    });
+  } catch (error: any) {
+    console.error('[prep-interview] Error:', error);
+    res.status(500).json({ error: error.message || 'Failed to generate interview prep' });
   }
 });

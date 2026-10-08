@@ -1,7 +1,11 @@
 export interface UserProfile {
+  profileName?: string;
+  isDefault?: boolean;
   id: string;
   fullName: string;
   targetTitle: string;
+  targetLevel?: string;
+  jobTitle?: string;
   location: string;
   preferredCompensation: string;
   linkedinUrl: string;
@@ -12,6 +16,16 @@ export interface UserProfile {
   resumeVersions?: ResumeVersion[];
   chatSummary?: string;
   education?: EducationEntry[];
+  workAuthorization?: WorkAuthorizationEntry[];
+  email?: string;
+  phone?: string;
+}
+
+export interface WorkAuthorizationEntry {
+  id: string;
+  country: string;
+  type: string;
+  validity: string;
 }
 
 export interface EducationEntry {
@@ -57,7 +71,15 @@ export interface ProjectBrief {
   scaleMetrics: string;
 }
 
-export type JobStage = 'Targeting' | 'Referral Requested' | 'Applied' | 'Recruiter Screen' | 'Technical Loop' | 'Onsite' | 'Offer Extended' | 'Archived';
+export type JobStage =
+  | 'Targeting'
+  | 'Referral Requested'
+  | 'Applied'
+  | 'Recruiter Screen'
+  | 'Technical Loop'
+  | 'Onsite'
+  | 'Offer Extended'
+  | 'Archived';
 
 export interface JobApplication {
   id: string;
@@ -69,10 +91,13 @@ export interface JobApplication {
   targetLevel: string;
   contacts: ContactPerson[];
   rawJobDescription: string;
+  cleanedJdJson?: any;
+  extractedMarkdown?: string;
   matchScore: number;
   stage: JobStage;
   notes: string;
-  
+  nextEventDate?: string;
+
   // AI Career-Ops Fields
   gapAnalysis?: string[];
   aiAnalysis?: {
@@ -89,7 +114,38 @@ export interface JobApplication {
     createdAt: number;
     keywordsTargeted: string[];
   }>;
-  outreachDrafts?: Array<{
+  tailoredResumePackage?: {
+    tailoredSummary?: string;
+    tailoredExperiences?: Array<{ id: string; tailoredBullets: string[] }>;
+    tailoredProjects?: Array<{
+      id: string;
+      tailoredImpact?: string;
+      tailoredArchitecture?: string;
+    }>;
+    coverLetterDraft?: string;
+    keywordAdjustments?: Array<{ keyword: string; suggestion?: string }>;
+    generatedAt?: number;
+  };
+  interviewPrep?: {
+    systemDesignQuestions?: Array<{ question: string; focusAreas: string[] }>;
+    behavioralPrompts?: Array<{ prompt: string; whyTheyAskThis: string }>;
+    generatedAt?: number;
+  };
+  outreachDraftsRecruiter?: Array<{
+    id: string;
+    subject: string;
+    body: string;
+    type: string;
+    createdAt: number;
+  }>;
+  outreachDraftsHiringManager?: Array<{
+    id: string;
+    subject: string;
+    body: string;
+    type: string;
+    createdAt: number;
+  }>;
+  outreachDraftsFriend?: Array<{
     id: string;
     subject: string;
     body: string;
@@ -114,4 +170,8 @@ export interface JobSearchHistoryEntry {
   timestamp: number;
   input: string;
   result: any;
+  status?: 'pending' | 'completed' | 'error';
+  progressPhase?: string;
+  progressPercent?: number;
+  error?: string;
 }

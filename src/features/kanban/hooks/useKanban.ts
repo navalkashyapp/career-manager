@@ -1,13 +1,15 @@
+import { JobStage } from '../../../types';
 import { useData } from '../../../hooks/useData';
 
 export const useKanban = () => {
-  const { applications, updateApplication, loading, error } = useData();
+  const { applications, updateApplication, addApplication, loading, error } = useData();
 
   return {
     applications,
     isLoading: loading,
     isError: !!error,
     error,
-    updateStage: (id: string, stage: string) => updateApplication(id, { stage })
+    updateStage: (id: string, stage: JobStage) => updateApplication(id, { stage }),
+    addApplication,
   };
 };

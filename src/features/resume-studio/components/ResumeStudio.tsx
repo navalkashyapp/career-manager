@@ -1,6 +1,18 @@
 import React, { useState, useRef } from 'react';
 import { useData } from '../../../hooks/useData';
-import { FileText, Wand2, Search, CheckCircle2, AlertCircle, ChevronRight, Save, History, SplitSquareHorizontal, Trash2, CloudUpload } from 'lucide-react';
+import {
+  FileText,
+  Wand2,
+  Search,
+  CheckCircle2,
+  AlertCircle,
+  ChevronRight,
+  Save,
+  History,
+  SplitSquareHorizontal,
+  Trash2,
+  CloudUpload,
+} from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../../lib/utils';
@@ -10,11 +22,12 @@ import html2pdf from 'html2pdf.js';
 import { Button } from '../../../components/ui/button';
 import { Textarea } from '../../../components/ui/textarea';
 import { Badge } from '../../../components/ui/badge';
+import { apiUrl, apiFetch } from '../../../config/api';
 
 export default function ResumeStudio() {
   const { profile, updateProfile, loading, error } = useData();
   const [activeTab, setActiveTab] = useState<'tailor' | 'compare'>('tailor');
-  
+
   // Tailor State
   const [jdText, setJdText] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -24,26 +37,26 @@ export default function ResumeStudio() {
     missingKeywords: string[];
     technicalSkills?: string[];
   } | null>(null);
-  
+
   // Compare State
   const [v1, setV1] = useState<string>('');
   const [v2, setV2] = useState<string>('');
-  
+
   // Saving State
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
   const resumeRef = useRef<HTMLDivElement>(null);
-  
+
   const handleTailor = async () => {
     if (!jdText.trim()) return;
     setIsAnalyzing(true);
-    
+
     try {
-      const res = await fetch('/api/gemini/tailor-resume', {
+      const res = await apiFetch(apiUrl('/api/gemini/tailor-resume'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jdText, profileData: profile })
+        body: JSON.stringify({ jdText, profileData: profile }),
       });
       const data = await res.json();
       setResult(data);
@@ -58,16 +71,16 @@ export default function ResumeStudio() {
     if (!result) return;
     const name = prompt('Enter a name for this resume version (e.g. Google TPM):');
     if (!name) return;
-    
+
     setIsSaving(true);
     try {
       const newVersion: ResumeVersion = {
         id: Date.now().toString(),
         name,
         timestamp: Date.now(),
-        markdown: result.resumeMarkdown
+        markdown: result.resumeMarkdown,
       };
-      
+
       const updatedVersions = [...(profile?.resumeVersions || []), newVersion];
       await updateProfile({ resumeVersions: updatedVersions });
       alert('Version saved successfully!');
@@ -78,11 +91,11 @@ export default function ResumeStudio() {
       setIsSaving(false);
     }
   };
-  
+
   const handleDeleteVersion = async (id: string) => {
     if (!confirm('Are you sure you want to delete this version?')) return;
     try {
-      const updatedVersions = (profile?.resumeVersions || []).filter(v => v.id !== id);
+      const updatedVersions = (profile?.resumeVersions || []).filter((v) => v.id !== id);
       await updateProfile({ resumeVersions: updatedVersions });
       if (v1 === id) setV1('');
       if (v2 === id) setV2('');
@@ -100,21 +113,26 @@ export default function ResumeStudio() {
 
       // Generate PDF Blob
       const element = resumeRef.current;
-      
+
       // We want to temporarily ensure text is dark for PDF if they are in dark mode
       const isDarkMode = document.documentElement.classList.contains('dark');
       const originalClasses = element.className;
       if (isDarkMode) {
-         element.classList.remove('dark:prose-invert', 'text-white', 'dark:text-white', 'dark:bg-[#1E293B]');
-         element.classList.add('text-slate-900', 'bg-white');
+        element.classList.remove(
+          'dark:prose-invert',
+          'text-white',
+          'dark:text-white',
+          'dark:bg-[#1E293B]',
+        );
+        element.classList.add('text-slate-900', 'bg-white');
       }
 
       const opt = {
-        margin:       0.5,
-        filename:     'resume.pdf',
-        image:        { type: 'jpeg' as const, quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true },
-        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' as const }
+        margin: 0.5,
+        filename: 'resume.pdf',
+        image: { type: 'jpeg' as const, quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' as const },
       };
 
       const pdfBlob = await html2pdf().set(opt).from(element).output('blob');
@@ -126,9 +144,12 @@ export default function ResumeStudio() {
 
       // Check for folder
       let folderId = null;
-      const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent("name='Job Applications' and mimeType='application/vnd.google-apps.folder' and trashed=false")}&fields=files(id)`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const searchRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent("name='Job Applications' and mimeType='application/vnd.google-apps.folder' and trashed=false")}&fields=files(id)`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
       const searchData = await searchRes.json();
       if (searchData.files && searchData.files.length > 0) {
         folderId = searchData.files[0].id;
@@ -137,13 +158,13 @@ export default function ResumeStudio() {
         const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             name: 'Job Applications',
-            mimeType: 'application/vnd.google-apps.folder'
-          })
+            mimeType: 'application/vnd.google-apps.folder',
+          }),
         });
         const createData = await createRes.json();
         folderId = createData.id;
@@ -152,19 +173,22 @@ export default function ResumeStudio() {
       // Upload file
       const metadata = {
         name: `Resume_Tailored_${Date.now()}.pdf`,
-        parents: [folderId]
+        parents: [folderId],
       };
 
       const formData = new FormData();
-      formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+      formData.append(
+        'metadata',
+        new Blob([JSON.stringify(metadata)], { type: 'application/json' }),
+      );
       formData.append('file', pdfBlob);
 
       await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
-        body: formData
+        body: formData,
       });
 
       alert('Resume exported to Drive successfully!');
@@ -196,22 +220,26 @@ export default function ResumeStudio() {
   if (error) {
     return <div className="p-8 text-rose-400">Error loading data: {error}</div>;
   }
-  
+
   const savedVersions = profile?.resumeVersions || [];
-  const version1 = savedVersions.find(v => v.id === v1);
-  const version2 = savedVersions.find(v => v.id === v2);
+  const version1 = savedVersions.find((v) => v.id === v1);
+  const version2 = savedVersions.find((v) => v.id === v2);
 
   return (
     <div className="h-full flex flex-col p-8 overflow-hidden">
       <div className="flex items-center justify-between mb-8 flex-shrink-0">
         <div>
-          <h1 className="text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">AI Resume Studio</h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-1">Tailor your profile and manage resume versions</p>
+          <h1 className="text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">
+            AI Resume Studio
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-1">
+            Tailor your profile and manage resume versions
+          </p>
         </div>
-        
+
         <div className="flex bg-slate-100 dark:bg-[#0F172A] p-1 rounded-lg border border-slate-200 dark:border-[#334155]">
           <Button
-            variant={activeTab === 'tailor' ? "secondary" : "ghost"}
+            variant={activeTab === 'tailor' ? 'secondary' : 'ghost'}
             size="sm"
             onClick={() => setActiveTab('tailor')}
           >
@@ -219,7 +247,7 @@ export default function ResumeStudio() {
             Tailor
           </Button>
           <Button
-            variant={activeTab === 'compare' ? "secondary" : "ghost"}
+            variant={activeTab === 'compare' ? 'secondary' : 'ghost'}
             size="sm"
             onClick={() => setActiveTab('compare')}
           >
@@ -237,7 +265,7 @@ export default function ResumeStudio() {
                 <Search size={18} className="text-slate-500 dark:text-slate-400" />
                 <span>Target Job Description</span>
               </h3>
-              <Button 
+              <Button
                 onClick={handleTailor}
                 disabled={isAnalyzing || !jdText.trim()}
                 className="bg-indigo-500 hover:bg-indigo-600 text-white"
@@ -256,28 +284,42 @@ export default function ResumeStudio() {
 
           <div className="flex flex-col space-y-6 overflow-y-auto">
             {result ? (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="space-y-6"
               >
                 <div className="bg-white/50 dark:bg-[#1E293B]/50 border border-slate-200 dark:border-[#334155] rounded-2xl p-6 grid grid-cols-2 gap-6">
                   <div>
-                    <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4 uppercase tracking-wider">ATS Match Score</h3>
+                    <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4 uppercase tracking-wider">
+                      ATS Match Score
+                    </h3>
                     <div className="flex items-end space-x-3">
-                      <span className={cn(
-                        "text-5xl font-semibold tracking-tighter",
-                        result.matchScore > 85 ? "text-emerald-400" : result.matchScore > 70 ? "text-amber-400" : "text-rose-400"
-                      )}>
+                      <span
+                        className={cn(
+                          'text-5xl font-semibold tracking-tighter',
+                          result.matchScore > 85
+                            ? 'text-emerald-400'
+                            : result.matchScore > 70
+                              ? 'text-amber-400'
+                              : 'text-rose-400',
+                        )}
+                      >
                         {result.matchScore}%
                       </span>
                     </div>
                   </div>
                   <div>
-                    <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4 uppercase tracking-wider">Missing Keywords</h3>
+                    <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4 uppercase tracking-wider">
+                      Missing Keywords
+                    </h3>
                     <div className="flex flex-wrap gap-2">
-                      {result.missingKeywords.map(kw => (
-                        <Badge key={kw} variant="destructive" className="bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/20 font-normal">
+                      {result.missingKeywords.map((kw) => (
+                        <Badge
+                          key={kw}
+                          variant="destructive"
+                          className="bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/20 font-normal"
+                        >
                           {kw}
                         </Badge>
                       ))}
@@ -292,7 +334,7 @@ export default function ResumeStudio() {
                       <span>Tailored Markdown Resume</span>
                     </h3>
                     <div className="flex items-center space-x-2">
-                      <Button 
+                      <Button
                         size="sm"
                         variant="outline"
                         onClick={handleExportDrive}
@@ -302,7 +344,7 @@ export default function ResumeStudio() {
                         <CloudUpload size={14} className="mr-1.5" />
                         {isExporting ? 'Exporting...' : 'Export to Drive'}
                       </Button>
-                      <Button 
+                      <Button
                         size="sm"
                         variant="ghost"
                         onClick={() => navigator.clipboard.writeText(result.resumeMarkdown)}
@@ -310,7 +352,7 @@ export default function ResumeStudio() {
                       >
                         Copy
                       </Button>
-                      <Button 
+                      <Button
                         size="sm"
                         variant="outline"
                         onClick={handleSaveVersion}
@@ -323,7 +365,10 @@ export default function ResumeStudio() {
                     </div>
                   </div>
                   <div className="p-8 overflow-y-auto bg-white dark:bg-[#1E293B] text-slate-900 dark:text-white prose prose-sm dark:prose-invert max-w-none">
-                    <div ref={resumeRef} className="bg-white dark:bg-[#1E293B] text-slate-900 dark:text-white prose prose-sm dark:prose-invert max-w-none p-4">
+                    <div
+                      ref={resumeRef}
+                      className="bg-white dark:bg-[#1E293B] text-slate-900 dark:text-white prose prose-sm dark:prose-invert max-w-none p-4"
+                    >
                       <ReactMarkdown>{result.resumeMarkdown}</ReactMarkdown>
                     </div>
                   </div>
@@ -334,9 +379,12 @@ export default function ResumeStudio() {
                 <div className="w-16 h-16 rounded-full bg-indigo-500/10 flex items-center justify-center mb-6">
                   <Wand2 size={32} className="text-indigo-400" />
                 </div>
-                <h3 className="text-xl font-medium text-slate-900 dark:text-white mb-2">AI-Powered Optimization</h3>
+                <h3 className="text-xl font-medium text-slate-900 dark:text-white mb-2">
+                  AI-Powered Optimization
+                </h3>
                 <p className="text-slate-500 dark:text-slate-400 max-w-sm">
-                  Paste a Job Description and let Gemini analyze the requirements, score your profile, and generate a tailored resume.
+                  Paste a Job Description and let Gemini analyze the requirements, score your
+                  profile, and generate a tailored resume.
                 </p>
               </div>
             )}
@@ -347,37 +395,48 @@ export default function ResumeStudio() {
           {savedVersions.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center text-center p-12 border border-dashed border-slate-200 dark:border-[#334155] rounded-2xl bg-white/50 dark:bg-[#1E293B]/20">
               <History size={48} className="text-slate-300 dark:text-slate-600 mb-4" />
-              <h3 className="text-xl font-medium text-slate-900 dark:text-white mb-2">No Saved Versions</h3>
+              <h3 className="text-xl font-medium text-slate-900 dark:text-white mb-2">
+                No Saved Versions
+              </h3>
               <p className="text-slate-500 dark:text-slate-400 max-w-sm">
-                You haven't saved any tailored resumes yet. Go back to the Tailor tab to generate and save your first version.
+                You haven't saved any tailored resumes yet. Go back to the Tailor tab to generate
+                and save your first version.
               </p>
             </div>
           ) : (
             <>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 flex-shrink-0">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Version 1 (Left)</label>
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Version 1 (Left)
+                  </label>
                   <select
                     value={v1}
                     onChange={(e) => setV1(e.target.value)}
                     className="w-full bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-[#334155] rounded-lg px-4 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   >
                     <option value="">Select a version...</option>
-                    {savedVersions.map(v => (
-                      <option key={v.id} value={v.id}>{v.name} ({new Date(v.timestamp).toLocaleDateString()})</option>
+                    {savedVersions.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.name} ({new Date(v.timestamp).toLocaleDateString()})
+                      </option>
                     ))}
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Version 2 (Right)</label>
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Version 2 (Right)
+                  </label>
                   <select
                     value={v2}
                     onChange={(e) => setV2(e.target.value)}
                     className="w-full bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-[#334155] rounded-lg px-4 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   >
                     <option value="">Select a version to compare...</option>
-                    {savedVersions.map(v => (
-                      <option key={v.id} value={v.id}>{v.name} ({new Date(v.timestamp).toLocaleDateString()})</option>
+                    {savedVersions.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.name} ({new Date(v.timestamp).toLocaleDateString()})
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -394,7 +453,7 @@ export default function ResumeStudio() {
                           <span>{version1.name}</span>
                         </h3>
                         <div className="flex items-center space-x-2">
-                          <Button 
+                          <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => navigator.clipboard.writeText(version1.markdown)}
@@ -402,7 +461,7 @@ export default function ResumeStudio() {
                           >
                             Copy
                           </Button>
-                          <Button 
+                          <Button
                             variant="ghost"
                             size="icon"
                             onClick={() => handleDeleteVersion(version1.id)}
@@ -434,7 +493,7 @@ export default function ResumeStudio() {
                           <span>{version2.name}</span>
                         </h3>
                         <div className="flex items-center space-x-2">
-                          <Button 
+                          <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => navigator.clipboard.writeText(version2.markdown)}
@@ -442,7 +501,7 @@ export default function ResumeStudio() {
                           >
                             Copy
                           </Button>
-                          <Button 
+                          <Button
                             variant="ghost"
                             size="icon"
                             onClick={() => handleDeleteVersion(version2.id)}
