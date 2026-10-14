@@ -141,6 +141,11 @@ async function startServer() {
   app.use('/api/career-ops/run', aiLimiter);
   app.use('/api/gemini', aiLimiter);
 
+  // Health check endpoint for frontend connectivity status polling
+  app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: Date.now() });
+  });
+
   // Mount the new career-ops router
   app.use('/api/career-ops', careerOpsRouter);
 

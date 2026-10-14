@@ -16,11 +16,13 @@ import {
   X,
   PanelLeftClose,
   PanelLeftOpen,
+  Activity,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { initAuth, googleSignIn, logout } from '../../store/firebase';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useBackendStatus } from '../../hooks/useBackendStatus';
 import CareerCoach from '../chat/CareerCoach';
 import { Button } from '../ui/button';
 
@@ -48,6 +50,7 @@ export default function Layout() {
     }
   });
   const { theme, toggleTheme } = useTheme();
+  const { status: backendStatus, lastChecked, checkNow } = useBackendStatus();
 
   const toggleSidebar = () => {
     setIsSidebarMinimized((prev) => {
@@ -171,7 +174,35 @@ export default function Layout() {
           <div className="w-8 h-8 rounded-lg overflow-hidden shadow-sm flex items-center justify-center shrink-0 border border-indigo-500/30">
             <img src="/logo192.png" alt="Career Manager" className="w-full h-full object-cover" />
           </div>
-          <span className="font-semibold text-lg tracking-tight">Career Manager</span>
+          <div>
+            <span className="font-semibold text-lg tracking-tight block leading-tight">
+              Career Manager
+            </span>
+            <div
+              className="flex items-center space-x-1.5 mt-0.5"
+              title={
+                lastChecked
+                  ? `Backend last checked: ${lastChecked.toLocaleTimeString()}`
+                  : 'Backend health check'
+              }
+            >
+              <span
+                className={cn(
+                  'w-2 h-2 rounded-full inline-block shrink-0',
+                  backendStatus === 'online' && 'bg-emerald-500 shadow-sm shadow-emerald-500/50',
+                  backendStatus === 'offline' && 'bg-rose-500 shadow-sm shadow-rose-500/50',
+                  backendStatus === 'checking' && 'bg-amber-400 animate-pulse',
+                )}
+              />
+              <span className="text-[10px] font-medium tracking-wide uppercase text-slate-500 dark:text-slate-400">
+                {backendStatus === 'online'
+                  ? 'Online'
+                  : backendStatus === 'offline'
+                    ? 'Offline'
+                    : 'Checking...'}
+              </span>
+            </div>
+          </div>
         </div>
         <Button
           variant="ghost"
@@ -207,19 +238,29 @@ export default function Layout() {
           )}
         >
           {isSidebarMinimized ? (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleSidebar}
-              title="Expand sidebar"
-              className="h-10 w-10 p-1 text-slate-500 hover:text-indigo-400 dark:text-slate-400 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-[#1E293B] rounded-xl transition-colors"
-            >
-              <img
-                src="/logo192.png"
-                alt="Career Manager"
-                className="w-7 h-7 rounded-lg object-cover"
-              />
-            </Button>
+            <div className="relative group flex items-center justify-center">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleSidebar}
+                title={`Expand sidebar (Backend: ${backendStatus})`}
+                className="h-10 w-10 p-1 text-slate-500 hover:text-indigo-400 dark:text-slate-400 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-[#1E293B] rounded-xl transition-colors relative"
+              >
+                <img
+                  src="/logo192.png"
+                  alt="Career Manager"
+                  className="w-7 h-7 rounded-lg object-cover"
+                />
+                <span
+                  className={cn(
+                    'absolute top-0.5 right-0.5 w-2.5 h-2.5 rounded-full border-2 border-slate-100 dark:border-[#0F172A]',
+                    backendStatus === 'online' && 'bg-emerald-500 shadow-sm shadow-emerald-500/50',
+                    backendStatus === 'offline' && 'bg-rose-500 shadow-sm shadow-rose-500/50',
+                    backendStatus === 'checking' && 'bg-amber-400 animate-pulse',
+                  )}
+                />
+              </Button>
+            </div>
           ) : (
             <>
               <div className="flex items-center space-x-3 text-slate-900 dark:text-white overflow-hidden">
@@ -230,9 +271,39 @@ export default function Layout() {
                     className="w-full h-full object-cover"
                   />
                 </div>
-                <span className="font-semibold text-lg tracking-tight truncate">
-                  Career Manager
-                </span>
+                <div className="flex flex-col min-w-0">
+                  <span className="font-semibold text-lg tracking-tight truncate leading-tight">
+                    Career Manager
+                  </span>
+                  <button
+                    onClick={() => checkNow()}
+                    title={
+                      lastChecked
+                        ? `Backend status: ${backendStatus} (Click to re-check. Last checked: ${lastChecked.toLocaleTimeString()})`
+                        : 'Click to re-check backend connectivity'
+                    }
+                    className="flex items-center space-x-1.5 mt-0.5 group text-left cursor-pointer hover:opacity-80 transition-opacity"
+                  >
+                    <span
+                      className={cn(
+                        'w-2 h-2 rounded-full inline-block shrink-0 transition-colors',
+                        backendStatus === 'online' &&
+                          'bg-emerald-500 shadow-sm shadow-emerald-500/50',
+                        backendStatus === 'offline' && 'bg-rose-500 shadow-sm shadow-rose-500/50',
+                        backendStatus === 'checking' && 'bg-amber-400 animate-pulse',
+                      )}
+                    />
+                    <span className="text-[10px] font-semibold tracking-wide uppercase text-slate-500 dark:text-slate-400 flex items-center space-x-1">
+                      <span>
+                        {backendStatus === 'online'
+                          ? 'Online'
+                          : backendStatus === 'offline'
+                            ? 'Offline'
+                            : 'Checking...'}
+                      </span>
+                    </span>
+                  </button>
+                </div>
               </div>
               <Button
                 variant="ghost"
