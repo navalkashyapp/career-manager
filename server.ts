@@ -82,33 +82,32 @@ async function startServer() {
       : []),
   ];
 
-  app.use(
-    cors({
-      origin: (origin, callback) => {
-        if (!origin) return callback(null, true);
-        if (
-          allowedOrigins.includes(origin) ||
-          origin.endsWith('.trycloudflare.com') ||
-          origin.endsWith('.ngrok-free.dev') ||
-          origin.endsWith('.ngrok-free.app') ||
-          origin.endsWith('.ngrok.app') ||
-          origin.endsWith('.ngrok.io')
-        ) {
-          return callback(null, true);
-        }
-        return callback(new Error(`CORS blocked for origin: ${origin}`));
-      },
-      credentials: true,
-      allowedHeaders: [
-        'Content-Type',
-        'Authorization',
-        'ngrok-skip-browser-warning',
-        'X-Requested-With',
-        'Accept',
-      ],
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    }),
-  );
+  const corsOptions = {
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
+      if (!origin) return callback(null, true);
+      if (
+        allowedOrigins.includes(origin) ||
+        origin.endsWith('.trycloudflare.com') ||
+        origin.endsWith('.ngrok-free.dev') ||
+        origin.endsWith('.ngrok-free.app') ||
+        origin.endsWith('.ngrok.app') ||
+        origin.endsWith('.ngrok.io') ||
+        origin.endsWith('.web.app') ||
+        origin.endsWith('.firebaseapp.com')
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, false);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  };
+
+  app.use(cors(corsOptions));
+  app.options('*', cors(corsOptions));
 
   const PORT = 3000;
 
