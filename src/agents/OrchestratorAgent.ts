@@ -114,7 +114,7 @@ export class OrchestratorAgent {
     const models = config.models ?? {};
     const agentFallbackModels = config.agentFallbackModels ?? {};
     const baseFallback = config.fallbackModels;
-    const agentConfig = { debug: config.debug ?? false };
+    const agentConfig = { debug: config.debug ?? false, useLocalCli: config.useLocalCli };
     this.batchConcurrency = config.batchConcurrency ?? DEFAULT_BATCH_CONCURRENCY;
 
     this.jobEval = new JobEvaluationAgent(aiClient, models.jobEval ?? GEMINI_MODELS.FLASH, {

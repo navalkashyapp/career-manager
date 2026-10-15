@@ -82,10 +82,11 @@ export abstract class BaseAgent {
         fullPrompt,
       );
 
-      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      const agyAttempts = 1;
+      for (let attempt = 0; attempt <= agyAttempts; attempt++) {
         try {
           const rawText = await AgyCliService.executePrompt(fullPrompt, schema, {
-            timeoutMs: 120000,
+            timeoutMs: 60000,
             debug,
           });
           this.log(debug, `AI RESPONSE [${this.constructor.name}] from agy`, rawText);
@@ -93,15 +94,17 @@ export abstract class BaseAgent {
         } catch (error) {
           lastError = error;
           this.log(debug, `AI FAILED [${this.constructor.name}] agy attempt ${attempt + 1}`, error);
-          fullPrompt +=
-            '\n\nYour previous response was not valid JSON. ' +
-            'Return ONLY the raw JSON object conforming to the schema without any markdown formatting.';
+          if (attempt < agyAttempts) {
+            fullPrompt +=
+              '\n\nYour previous response was not valid JSON. ' +
+              'Return ONLY the raw JSON object conforming to the schema without any markdown formatting.';
+          }
         }
       }
 
       this.log(
         debug,
-        `[${this.constructor.name}] agy attempts failed, falling back to GoogleGenAI SDK...`,
+        `[${this.constructor.name}] agy attempts failed, falling back immediately to GoogleGenAI SDK...`,
       );
     }
 
@@ -126,8 +129,13 @@ export abstract class BaseAgent {
                 `AI FALLBACK [${this.constructor.name}] Using fallback model: ${effectiveModel}`,
               );
             }
+            const keyToUse = apiKeys.length > 0 ? apiKeys[keyIndex % apiKeys.length] : undefined;
             const client =
-              this.ai ?? new GoogleGenAI({ apiKey: apiKeys[keyIndex % apiKeys.length] || '' });
+              keyIndex === 0 && this.ai
+                ? this.ai
+                : keyToUse
+                  ? new GoogleGenAI({ apiKey: keyToUse })
+                  : this.ai || new GoogleGenAI({ apiKey: '' });
             return client.models.generateContent({
               model: effectiveModel,
               contents: fullPrompt,

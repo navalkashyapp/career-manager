@@ -88,14 +88,20 @@ export class AgyCliService {
     return new Promise((resolve, reject) => {
       execFile(
         agyBin,
-        ['-p', fullPrompt],
+        ['--dangerously-skip-permissions', '-p', fullPrompt],
         { maxBuffer: 15 * 1024 * 1024, timeout },
         (error: any, stdout: string, stderr: string) => {
           if (error) {
             if (options.debug && stderr) console.error('[AgyCliService stderr]:', stderr);
             return reject(error);
           }
-          resolve((stdout || '').trim());
+          const text = (stdout || '').trim();
+          if (!text) {
+            const errDetail = (stderr || '').trim() || 'Received empty response text from agy CLI.';
+            if (options.debug) console.error('[AgyCliService empty stdout]:', errDetail);
+            return reject(new Error(errDetail));
+          }
+          resolve(text);
         },
       );
     });
