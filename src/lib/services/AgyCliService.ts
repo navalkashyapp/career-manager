@@ -88,7 +88,7 @@ export class AgyCliService {
     return new Promise((resolve, reject) => {
       execFile(
         agyBin,
-        ['--dangerously-skip-permissions', '-p', fullPrompt],
+        ['--dangerously-skip-permissions', '--disable-slash-commands', '-p', fullPrompt],
         { maxBuffer: 15 * 1024 * 1024, timeout },
         (error: any, stdout: string, stderr: string) => {
           if (error) {

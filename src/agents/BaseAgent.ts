@@ -82,11 +82,11 @@ export abstract class BaseAgent {
         fullPrompt,
       );
 
-      const agyAttempts = 1;
-      for (let attempt = 0; attempt <= agyAttempts; attempt++) {
+      const maxAgyAttempts = 1;
+      for (let attempt = 0; attempt < maxAgyAttempts; attempt++) {
         try {
           const rawText = await AgyCliService.executePrompt(fullPrompt, schema, {
-            timeoutMs: 60000,
+            timeoutMs: 120000,
             debug,
           });
           this.log(debug, `AI RESPONSE [${this.constructor.name}] from agy`, rawText);
@@ -94,11 +94,6 @@ export abstract class BaseAgent {
         } catch (error) {
           lastError = error;
           this.log(debug, `AI FAILED [${this.constructor.name}] agy attempt ${attempt + 1}`, error);
-          if (attempt < agyAttempts) {
-            fullPrompt +=
-              '\n\nYour previous response was not valid JSON. ' +
-              'Return ONLY the raw JSON object conforming to the schema without any markdown formatting.';
-          }
         }
       }
 
