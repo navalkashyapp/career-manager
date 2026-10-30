@@ -23,6 +23,7 @@ import {
   Briefcase,
   FileCode2,
   CheckCircle2,
+  Plus,
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
@@ -528,6 +529,34 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
       setTailorError(err.message || 'Failed to tailor resume.');
     } finally {
       setTailorLoading(false);
+    }
+  };
+
+  const handleAddBullet = async (expIndex: number) => {
+    if (!tailorData?.tailoredExperiences) return;
+    const newExperiences = tailorData.tailoredExperiences.map((exp: any, idx: number) => {
+      if (idx !== expIndex) return exp;
+      const currentBullets = Array.isArray(exp.tailoredBullets) ? exp.tailoredBullets : [];
+      return {
+        ...exp,
+        tailoredBullets: [...currentBullets, 'New bullet point'],
+      };
+    });
+
+    const newData = {
+      ...tailorData,
+      tailoredExperiences: newExperiences,
+    };
+
+    setTailorData(newData);
+    if (app.id) {
+      try {
+        await updateApplication(app.id, {
+          tailoredResumePackage: newData,
+        });
+      } catch (err) {
+        console.error('Failed to save added bullet to Firestore:', err);
+      }
     }
   };
 
@@ -1192,6 +1221,22 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
                             <p className="font-medium text-slate-800 dark:text-slate-200 mb-2 text-xs border-b border-slate-200 dark:border-[#334155] pb-1.5">
                               Role / Project: {exp.company} - {exp.role} | {exp.roleDates}
                             </p>
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                Tailored Bullets
+                              </span>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleAddBullet(i)}
+                                className="h-6 px-2 text-xs text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 flex items-center gap-1 rounded"
+                                title="Add bullet item"
+                              >
+                                <Plus size={13} />
+                                <span>Add bullet</span>
+                              </Button>
+                            </div>
                             <ul className="list-disc pl-5 space-y-2 text-xs sm:text-sm text-slate-700 dark:text-slate-300">
                               {exp.tailoredBullets?.map((bullet: string, j: number) => (
                                 <li key={j}>
@@ -1209,6 +1254,7 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
                                       }
                                     }}
                                     className="w-full text-xs sm:text-sm min-h-[40px] p-1 bg-transparent border border-transparent hover:border-slate-200 dark:hover:border-slate-700 focus:border-indigo-500 rounded-md transition-colors resize-none overflow-hidden"
+                                    placeholder="Enter bullet point..."
                                     onInput={(e: any) => {
                                       e.target.style.height = 'auto';
                                       e.target.style.height = e.target.scrollHeight + 'px';

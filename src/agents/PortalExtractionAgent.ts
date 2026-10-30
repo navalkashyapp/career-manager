@@ -125,7 +125,7 @@ export class PortalExtractionAgent extends BaseAgent {
   protected getSystemPrompt(): string {
     return `
 You extract structured job metadata from scraped pages and DOM snippets
-(Greenhouse, LInkedin, Lever, Ashby, Workday, and generic career pages).
+(Greenhouse, Linkedin, Lever, Ashby, Workday, and generic career pages).
 
 EXTRACTION RULES
 - Extract ONLY what is on the page. Empty string when a field is absent —
