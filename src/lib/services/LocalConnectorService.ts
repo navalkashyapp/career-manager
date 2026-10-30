@@ -14,7 +14,10 @@ export class LocalConnectorService {
     ai: any,
   ): Promise<void> {
     console.log(`[Connector] Starting automated job search for: ${keywords}`);
-    const browser = await chromium.launch({ headless: true });
+    const browser = await chromium.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+    });
 
     try {
       const page = await browser.newPage();

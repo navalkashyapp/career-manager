@@ -1,0 +1,15 @@
+node_modules
+dist
+.git
+.gitignore
+.env
+.env.local
+.env.*.local
+service-account.json
+*.log
+.firebase
+.husky
+.antigravity
+.agents
+.vscode
+tsc_errors.log

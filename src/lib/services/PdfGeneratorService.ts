@@ -7,23 +7,26 @@ export class PdfGeneratorService {
    */
   private static normalizeTextForATS(html: string): string {
     const masks: string[] = [];
-    const masked = html.replace(
-      /<(style|script)\b[^>]*>[\s\S]*?<\/\1>/gi,
-      (match) => {
-        const token = `\u0000MASK${masks.length}\u0000`;
-        masks.push(match);
-        return token;
-      }
-    );
+    const masked = html.replace(/<(style|script)\b[^>]*>[\s\S]*?<\/\1>/gi, (match) => {
+      const token = `\u0000MASK${masks.length}\u0000`;
+      masks.push(match);
+      return token;
+    });
 
     let out = '';
     let i = 0;
     while (i < masked.length) {
       const lt = masked.indexOf('<', i);
-      if (lt === -1) { out += this.sanitizeText(masked.slice(i)); break; }
+      if (lt === -1) {
+        out += this.sanitizeText(masked.slice(i));
+        break;
+      }
       out += this.sanitizeText(masked.slice(i, lt));
       const gt = masked.indexOf('>', lt);
-      if (gt === -1) { out += masked.slice(lt); break; }
+      if (gt === -1) {
+        out += masked.slice(lt);
+        break;
+      }
       out += masked.slice(lt, gt + 1);
       i = gt + 1;
     }
@@ -52,17 +55,20 @@ export class PdfGeneratorService {
 
   /**
    * Generates a PDF buffer from HTML content.
-   * 
+   *
    * @param htmlContent The HTML string to render
    * @returns A Buffer containing the PDF data
    */
   public static async generatePdf(htmlContent: string): Promise<Buffer> {
     const normalizedHtml = this.normalizeTextForATS(htmlContent);
-    
-    const browser = await chromium.launch({ headless: true });
+
+    const browser = await chromium.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+    });
     try {
       const page = await browser.newPage();
-      
+
       await page.setContent(normalizedHtml, { waitUntil: 'networkidle' });
 
       // Apply some basic print styles if not already present
@@ -71,13 +77,13 @@ export class PdfGeneratorService {
           @page { margin: 0.6in; }
           body { font-family: sans-serif; }
           a { text-decoration: none; color: black; }
-        `
+        `,
       });
 
       const pdfBuffer = await page.pdf({
         format: 'Letter',
         printBackground: true,
-        displayHeaderFooter: false
+        displayHeaderFooter: false,
       });
 
       return pdfBuffer;
