@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { UserProfile, JobApplication, JobSearchHistoryEntry } from '../types';
+import { UserProfile, JobApplication, JobSearchHistoryEntry, JobUrlEntry } from '../types';
 import { auth, db } from '../store/firebase';
 import {
   doc,
@@ -53,6 +53,13 @@ interface DataContextType {
   addSearchHistory: (entry: JobSearchHistoryEntry) => Promise<void>;
   deleteSearchHistory: (id: string) => Promise<void>;
   clearSearchHistory: () => Promise<void>;
+  jobUrls: JobUrlEntry[];
+  addJobUrl: (
+    url: string,
+    meta?: { targetRole?: string; company?: string; location?: string },
+  ) => Promise<string>;
+  updateJobUrl: (id: string, updates: Partial<JobUrlEntry>) => Promise<void>;
+  deleteJobUrl: (id: string) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | null>(null);
@@ -63,6 +70,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [activeProfileId, setActiveProfileId] = useState<string>('default');
   const [applications, setApplications] = useState<JobApplication[]>([]);
   const [searchHistory, setSearchHistory] = useState<JobSearchHistoryEntry[]>([]);
+  const [jobUrls, setJobUrls] = useState<JobUrlEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const pollerRef = useRef<TaskPollingService | null>(null);
@@ -74,6 +82,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setAlternateProfiles([]);
         setApplications([]);
         setSearchHistory([]);
+        setJobUrls([]);
         setLoading(false);
         if (pollerRef.current) {
           pollerRef.current.stopPolling();
@@ -158,11 +167,28 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         },
       );
 
+      const jobUrlsRef = collection(db, 'users', userId, 'job_urls');
+      const unsubJobUrls = onSnapshot(
+        jobUrlsRef,
+        (querySnapshot) => {
+          const urls: JobUrlEntry[] = [];
+          querySnapshot.forEach((doc) => {
+            urls.push({ ...doc.data(), id: doc.id } as JobUrlEntry);
+          });
+          urls.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+          setJobUrls(urls);
+        },
+        (err) => {
+          console.error('Job URLs snapshot error:', err);
+        },
+      );
+
       return () => {
         unsubProfile();
         unsubProfiles();
         unsubApps();
         unsubHistory();
+        unsubJobUrls();
         if (pollerRef.current) {
           pollerRef.current.stopPolling();
           pollerRef.current = null;
@@ -339,6 +365,60 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const addJobUrl = async (
+    url: string,
+    meta?: { targetRole?: string; company?: string; location?: string },
+  ): Promise<string> => {
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error('Not authenticated');
+      const normalizedUrl = url.trim();
+      if (!normalizedUrl) throw new Error('URL is required');
+
+      const urlsRef = doc(collection(db, 'users', user.uid, 'job_urls'));
+      const entry: JobUrlEntry = {
+        id: urlsRef.id,
+        url: normalizedUrl,
+        targetRole: meta?.targetRole || '',
+        company: meta?.company || '',
+        location: meta?.location || '',
+        status: 'pending',
+        addedAt: Date.now(),
+      };
+      const cleanEntry = sanitizeFirestoreSet(entry);
+      await setDoc(urlsRef, cleanEntry);
+      return urlsRef.id;
+    } catch (err: any) {
+      console.error('Error adding job URL:', err);
+      throw err;
+    }
+  };
+
+  const updateJobUrl = async (id: string, updates: Partial<JobUrlEntry>) => {
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error('Not authenticated');
+      const ref = doc(db, 'users', user.uid, 'job_urls', id);
+      const cleanUpdates = sanitizeFirestoreUpdate(updates);
+      await updateDoc(ref, cleanUpdates);
+    } catch (err: any) {
+      console.error('Error updating job URL:', err);
+      throw err;
+    }
+  };
+
+  const deleteJobUrl = async (id: string) => {
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error('Not authenticated');
+      const ref = doc(db, 'users', user.uid, 'job_urls', id);
+      await deleteDoc(ref);
+    } catch (err: any) {
+      console.error('Error deleting job URL:', err);
+      throw err;
+    }
+  };
+
   const activeProfile =
     activeProfileId === 'default'
       ? mainProfile || defaultProfile
@@ -364,6 +444,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addSearchHistory,
         deleteSearchHistory,
         clearSearchHistory,
+        jobUrls,
+        addJobUrl,
+        updateJobUrl,
+        deleteJobUrl,
       }}
     >
       {children}

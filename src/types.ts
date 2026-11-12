@@ -175,3 +175,16 @@ export interface JobSearchHistoryEntry {
   progressPercent?: number;
   error?: string;
 }
+
+export interface JobUrlEntry {
+  id: string;
+  url: string;
+  targetRole?: string;
+  company?: string;
+  location?: string;
+  status: 'pending' | 'traversing' | 'completed' | 'failed';
+  addedAt: number;
+  lastTraversedAt?: number;
+  error?: string;
+  applicationId?: string;
+}

@@ -458,14 +458,14 @@ careerOpsRouter.post('/extract-job-url', async (req, res) => {
       jobDescriptionText = await JobScraperService.scrapeJobPosting(url);
     }
 
-    if (!jobDescriptionText || jobDescriptionText.trim().length < 40) {
+    if (!jobDescriptionText || jobDescriptionText.trim().length < 150) {
       throw new Error(
-        'Unable to extract sufficient job text from this URL. Please verify the link or paste the text directly.',
+        'Unable to extract sufficient text from this URL. The page may be empty, blocked, or requires authentication.',
       );
     }
 
     sendEvent('progress', {
-      phase: 'Extracting role profile & company with Antigravity Agents V2...',
+      phase: 'Validating job posting & extracting details...',
       percentage: 60,
     });
 
@@ -480,6 +480,23 @@ careerOpsRouter.post('/extract-job-url', async (req, res) => {
       extracted,
       '\n=================================\n',
     );
+
+    if (extracted.pageType === 'listing-page') {
+      throw new Error(
+        'This link points to a job listing board or search results, not an individual job vacancy.',
+      );
+    }
+
+    const hasSubstantiveJobContent =
+      (extracted.requirements && extracted.requirements.length > 0) ||
+      (extracted.responsibilities && extracted.responsibilities.length > 0) ||
+      (extracted.roleDescription && extracted.roleDescription.length > 80);
+
+    if (!hasSubstantiveJobContent && extracted.pageType === 'unknown') {
+      throw new Error(
+        'The linked page does not contain identifiable job requirements or duties. Please verify the URL.',
+      );
+    }
 
     sendEvent('progress', { phase: 'Extraction complete!', percentage: 100 });
     sendEvent('done', {

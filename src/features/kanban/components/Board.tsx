@@ -10,13 +10,15 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
-import { Search, Filter, Plus, AlertCircle } from 'lucide-react';
+import { Search, Filter, Plus, AlertCircle, Globe } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Column } from './Column';
 import { TableView } from './TableView';
 import { AddJobModal } from './AddJobModal';
 import { JobDetailsModal } from './JobDetailsModal';
+import { JobUrlsModal } from './JobUrlsModal';
+import { useData } from '../../../hooks/useData';
 
 import { useUIStore } from '../../../store/useUIStore';
 
@@ -33,10 +35,14 @@ const STAGES: JobStage[] = [
 
 export default function Board() {
   const { applications, updateStage, isLoading, error } = useKanban();
+  const { jobUrls } = useData();
   const [view, setView] = useState<'kanban' | 'table'>('kanban');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<JobStage | 'All'>('All');
   const [isAddJobOpen, setIsAddJobOpen] = useState(false);
+  const [isJobUrlsOpen, setIsJobUrlsOpen] = useState(false);
+
+  const pendingUrlsCount = jobUrls.filter((j) => j.status === 'pending').length;
 
   const { activeModal, activeApp, openModal, closeModal } = useUIStore();
 
@@ -185,6 +191,20 @@ export default function Board() {
           </div>
 
           <Button
+            variant="outline"
+            onClick={() => setIsJobUrlsOpen(true)}
+            className="border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 flex items-center space-x-1.5 shadow-xs"
+          >
+            <Globe size={16} />
+            <span>Job URLs Queue</span>
+            {pendingUrlsCount > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 bg-amber-500 text-white rounded-full text-[10px] font-bold">
+                {pendingUrlsCount}
+              </span>
+            )}
+          </Button>
+
+          <Button
             onClick={() => setIsAddJobOpen(true)}
             className="bg-indigo-600 hover:bg-indigo-500 text-white flex items-center space-x-1.5 shadow-sm"
           >
@@ -216,6 +236,7 @@ export default function Board() {
       )}
 
       <AddJobModal isOpen={isAddJobOpen} onClose={() => setIsAddJobOpen(false)} />
+      <JobUrlsModal isOpen={isJobUrlsOpen} onClose={() => setIsJobUrlsOpen(false)} />
 
       {activeModal && activeApp && (
         <JobDetailsModal

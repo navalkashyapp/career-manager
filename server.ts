@@ -13,6 +13,7 @@ import { OrchestratorAgent } from './src/agents';
 import { JobScraperService } from './src/lib/services/JobScraperService';
 import { PdfGeneratorService } from './src/lib/services/PdfGeneratorService';
 import { LocalConnectorService } from './src/lib/services/LocalConnectorService';
+import { JobUrlWorkerService } from './src/lib/services/JobUrlWorkerService';
 import { AgyCliService } from './src/lib/services/AgyCliService';
 import * as fs from 'fs';
 import { z } from 'zod';
@@ -143,6 +144,39 @@ async function startServer() {
   // Health check endpoint for frontend connectivity status polling
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: Date.now() });
+  });
+
+  // Background Job URLs Worker Endpoints (Mounted before auth-restricted router)
+  app.get(['/api/career-ops/job-urls/status', '/api/job-urls/status'], (req, res) => {
+    try {
+      res.json(JobUrlWorkerService.getStatus());
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post(['/api/career-ops/job-urls/trigger', '/api/job-urls/trigger'], async (req, res) => {
+    try {
+      const { forceAll, userId } = req.body || {};
+      const result = await JobUrlWorkerService.triggerNow({ forceAll, userId });
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post(['/api/career-ops/job-urls/toggle', '/api/job-urls/toggle'], (req, res) => {
+    try {
+      const { enable } = req.body || {};
+      if (enable) {
+        JobUrlWorkerService.start();
+      } else {
+        JobUrlWorkerService.stop();
+      }
+      res.json(JobUrlWorkerService.getStatus());
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
   });
 
   // Mount the new career-ops router
@@ -605,6 +639,23 @@ Summarize the thread into key action items for the candidate. Return the result 
   server.headersTimeout = 10000; // 10s: drop slowloris header stalls
   server.requestTimeout = 600000; // 10m: allow full streaming evaluation jobs
   server.keepAliveTimeout = 65000; // 65s: keep-alive matching Cloudflare edge defaults
+
+  // Start periodic Job URLs background worker
+  if (process.env.JOB_WORKER_ENABLED !== 'false') {
+    JobUrlWorkerService.start();
+  }
+
+  // Graceful shutdown handling
+  const handleShutdown = () => {
+    console.log('Shutting down server, terminating background workers...');
+    JobUrlWorkerService.stop();
+    server.close(() => {
+      process.exit(0);
+    });
+  };
+
+  process.on('SIGINT', handleShutdown);
+  process.on('SIGTERM', handleShutdown);
 }
 
 startServer();

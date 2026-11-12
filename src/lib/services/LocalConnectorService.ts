@@ -16,11 +16,34 @@ export class LocalConnectorService {
     console.log(`[Connector] Starting automated job search for: ${keywords}`);
     const browser = await chromium.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-blink-features=AutomationControlled',
+      ],
     });
 
     try {
-      const page = await browser.newPage();
+      const context = await browser.newContext({
+        userAgent:
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+        viewport: { width: 1366, height: 768 },
+        locale: 'en-US',
+        timezoneId: 'America/New_York',
+        extraHTTPHeaders: {
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+      });
+
+      const page = await context.newPage();
+
+      await page.addInitScript(() => {
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+        Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+        Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+        (window as any).chrome = { runtime: {} };
+      });
 
       // Navigate to LinkedIn Jobs search (no auth required for public search)
       const encodedQuery = encodeURIComponent(keywords);
