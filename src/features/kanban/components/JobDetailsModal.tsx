@@ -186,13 +186,28 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
   };
 
   const handleExtractJdWithAi = async () => {
-    if (!app.rawJobDescription) return;
+    if (!app.rawJobDescription && !app.jobUrl) return;
     setIsExtractingJd(true);
     setExtractJdError(null);
     setExtractJdPhase('Analyzing job description with Antigravity...');
     setExtractJdPercentage(20);
     try {
-      const data = await extractJobFromUrl({ jdText: app.rawJobDescription }, (p) => {
+      // If the saved description was blocked by anti-bot, or if a jobUrl is present and re-extracting,
+      // request via URL so JobScraperService actually attempts a fresh scrape with Playwright fallback.
+      const isSavedTextBlocked =
+        app.rawJobDescription &&
+        /you have been blocked|sorry, you have been blocked|cloudflare ray id/i.test(
+          app.rawJobDescription,
+        );
+
+      const payload =
+        isSavedTextBlocked && app.jobUrl
+          ? { url: app.jobUrl }
+          : app.jobUrl && !app.rawJobDescription
+            ? { url: app.jobUrl }
+            : { jdText: app.rawJobDescription, url: app.jobUrl };
+
+      const data = await extractJobFromUrl(payload, (p) => {
         setExtractJdPhase(p.phase);
         setExtractJdPercentage(p.percentage);
       });
@@ -233,6 +248,7 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
       await updateApplication(app.id, {
         cleanedJdJson: data,
         extractedMarkdown: generatedMarkdown,
+        ...(data.rawJobDescription ? { rawJobDescription: data.rawJobDescription } : {}),
         ...(data.companyName && data.companyName !== 'Unknown Company' && !app.companyName
           ? { companyName: data.companyName }
           : {}),

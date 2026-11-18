@@ -76,13 +76,25 @@ export class JobScraperService {
   public static async scrapeJobPosting(url: string): Promise<string> {
     // 1. Fast path: LinkedIn Guest API
     if (url.includes('linkedin.com')) {
+      console.log(`[JobScraper] Attempting fast LinkedIn guest endpoint for: ${url}`);
       const guestText = await this.fetchLinkedInGuestApi(url);
       if (guestText) {
+        console.log(
+          `[JobScraper] ✔ Successfully fetched via LinkedIn guest endpoint (${guestText.length} chars).`,
+        );
         return guestText;
       }
+      console.warn(
+        `[JobScraper] Guest endpoint missed or rate-limited. Falling back to stealth Playwright...`,
+      );
+    } else {
+      console.log(
+        `[JobScraper] Non-LinkedIn URL. Scraping directly via stealth Playwright: ${url}`,
+      );
     }
 
     // 2. Fallback: Stealth Playwright
+    console.log(`[JobScraper] Launching Playwright browser instance...`);
     const browser = await chromium.launch({
       headless: true,
       args: [
@@ -146,6 +158,18 @@ export class JobScraperService {
 
       // Cleanup excessive whitespace
       const cleanText = textContent.replace(/\n{3,}/g, '\n\n').trim();
+
+      // Check if page body is an anti-bot security challenge
+      const lower = cleanText.toLowerCase();
+      if (
+        lower.includes('you have been blocked') ||
+        lower.includes('sorry, you have been blocked') ||
+        lower.includes('why have i been blocked') ||
+        lower.includes('cloudflare ray id')
+      ) {
+        throw new Error('Anti-bot challenge encountered ("you have been blocked")');
+      }
+
       return cleanText;
     } catch (error) {
       console.error(`Failed to scrape job posting at ${url}:`, error);

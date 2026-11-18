@@ -464,6 +464,73 @@ careerOpsRouter.post('/extract-job-url', async (req, res) => {
       );
     }
 
+    const lowerJd = jobDescriptionText.toLowerCase();
+    const isBlocked =
+      lowerJd.includes('you have been blocked') ||
+      lowerJd.includes('sorry, you have been blocked') ||
+      lowerJd.includes('why have i been blocked') ||
+      lowerJd.includes('cloudflare ray id');
+
+    if (isBlocked) {
+      console.warn(
+        '[extract-job-url] Anti-bot block detected in scraped content. Providing structured fallback response.',
+      );
+      const { inferRoleAndCompanyFromUrl } = await import('../services/JobUrlWorkerService.js');
+      const { jobTitle, companyName } = inferRoleAndCompanyFromUrl(url || '');
+
+      const placeholderMarkdown = [
+        `## ${jobTitle} @ ${companyName}\n`,
+        `**Location:** Remote / Unspecified  •  **Status:** ⚠️ Scraping Blocked\n`,
+        url ? `🔗 [View Original Job Posting](${url})\n` : '',
+        '---\n',
+        `### ⚠️ Automated Scraping Notice\n`,
+        `The job page could not be scraped directly because the website is protected by an anti-bot security service ("you have been blocked").\n`,
+        `This job has been added to your Target lane. You can click the original link to view full requirements or paste the description text.\n`,
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      sendEvent('progress', {
+        phase: 'Scraping blocked — saving fallback to Target lane...',
+        percentage: 100,
+      });
+      sendEvent('done', {
+        companyName,
+        companyDescription: '',
+        roleTitle: jobTitle,
+        jobTitle,
+        roleDescription:
+          'Automated scraping was blocked by an anti-bot challenge on the host site.',
+        jobSummary: 'Automated scraping was blocked by an anti-bot challenge on the host site.',
+        location: 'Remote / Unspecified',
+        salary: { raw: 'Competitive' },
+        salaryRange: 'Competitive',
+        targetLevel: 'Senior',
+        experienceLevel: 'Senior',
+        department: '',
+        requirements: ['Check original job link for full requirements'],
+        keyRequirements: ['Check original job link for full requirements'],
+        niceToHaves: [],
+        qualifications: [],
+        responsibilities: ['Check original job link for responsibilities'],
+        benefits: [],
+        remotePolicy: 'unknown',
+        employmentType: 'Full-time',
+        rawJobDescription: jobDescriptionText,
+        extractedMarkdown: placeholderMarkdown,
+        jobUrl: url || '',
+        pageType: 'single-posting',
+        detectedPostings: [],
+        fieldConfidence: { companyName: 'low', roleTitle: 'low' },
+        warnings: [
+          'Scraping was blocked by host anti-bot challenge ("you have been blocked"). Basic metadata was inferred from the URL.',
+        ],
+        isScrapeBlocked: true,
+      });
+      res.end();
+      return;
+    }
+
     sendEvent('progress', {
       phase: 'Validating job posting & extracting details...',
       percentage: 60,

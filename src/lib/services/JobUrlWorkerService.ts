@@ -146,6 +146,74 @@ export function detectClosedOrExpiredContent(text: string): { isClosed: boolean;
   return { isClosed: false };
 }
 
+/**
+ * Text-based signals indicating that the scraper was blocked or hit an anti-bot challenge.
+ */
+export function isScraperBlockedContent(text: string): { isBlocked: boolean; reason?: string } {
+  const normalized = text.toLowerCase();
+
+  if (
+    normalized.includes('you have been blocked') ||
+    normalized.includes('sorry, you have been blocked') ||
+    normalized.includes('why have i been blocked') ||
+    normalized.includes('cloudflare ray id') ||
+    normalized.includes('please enable javascript and cookies to continue') ||
+    normalized.includes('access to this page has been denied') ||
+    normalized.includes('verify you are a human')
+  ) {
+    return {
+      isBlocked: true,
+      reason: 'Anti-bot or Cloudflare security block detected ("you have been blocked")',
+    };
+  }
+
+  return { isBlocked: false };
+}
+
+/**
+ * Heuristically infers role title and company name from URL structure when scraping is blocked.
+ */
+export function inferRoleAndCompanyFromUrl(
+  url: string,
+  fallbackCompany?: string,
+  fallbackRole?: string,
+): { jobTitle: string; companyName: string } {
+  let jobTitle = (fallbackRole || '').trim();
+  let companyName = (fallbackCompany || '').trim();
+
+  try {
+    const parsed = new URL(url);
+    const pathname = parsed.pathname;
+
+    // Check for LinkedIn pattern: /jobs/view/<slug-with-role-and-company>-<id>
+    if (parsed.hostname.includes('linkedin.com')) {
+      const parts = pathname.split('/').filter(Boolean);
+      const lastPart = parts[parts.length - 1] || '';
+      // Pattern e.g. "software-engineer-at-meta-123456"
+      const match = lastPart.match(/(.+)-at-(.+)-\d+/i);
+      if (match) {
+        if (!jobTitle) {
+          jobTitle = match[1]
+            .replace(/[-_]+/g, ' ')
+            .replace(/\b\w/g, (c) => c.toUpperCase())
+            .trim();
+        }
+        if (!companyName) {
+          companyName = match[2]
+            .replace(/[-_]+/g, ' ')
+            .replace(/\b\w/g, (c) => c.toUpperCase())
+            .trim();
+        }
+      }
+    }
+  } catch {}
+
+  return {
+    jobTitle: jobTitle || 'Target Role (Scraping Blocked)',
+    companyName: companyName || 'Company (Scraping Blocked)',
+  };
+}
+
 export class JobUrlWorkerService {
   private static timer: NodeJS.Timeout | null = null;
   private static isRunning = false;
@@ -393,7 +461,90 @@ export class JobUrlWorkerService {
         return;
       }
 
-      // Step 3: Check scraped length
+      // Step 3: Check if scraping hit an anti-bot security challenge or "you have been blocked" page
+      const blockCheck = isScraperBlockedContent(rawText);
+      if (blockCheck.isBlocked) {
+        const blockReason =
+          'Scraping failed: anti-bot challenge encountered ("you have been blocked"). Job marked as failed.';
+        console.warn(
+          `[JobUrlWorker] ⚠️ BLOCKED SCRAPE: ${data.url} - ${blockReason}. Ingesting fallback into Target lane...`,
+        );
+
+        // Still add to Target lane as requested
+        const { jobTitle, companyName } = inferRoleAndCompanyFromUrl(
+          data.url,
+          data.company,
+          data.targetRole,
+        );
+
+        const placeholderMarkdown = [
+          `## ${jobTitle} @ ${companyName}\n`,
+          `**Location:** ${data.location || 'Remote / Unspecified'}  •  **Status:** ⚠️ Scraping Blocked\n`,
+          `🔗 [View Original Job Posting](${data.url})\n`,
+          '---\n',
+          `### ⚠️ Automated Scraping Notice\n`,
+          `The job page could not be fully scraped automatically because an anti-bot block was encountered ("you have been blocked").\n`,
+          `Please open the original link directly to review requirements, or paste the job description text manually.\n\n`,
+          `\`\`\`\n${rawText.slice(0, 500)}\n\`\`\`\n`,
+        ].join('\n');
+
+        const appsCol = adminDb.collection('users').doc(userId).collection('applications');
+        const existingAppSnap = await appsCol.where('jobUrl', '==', data.url).limit(1).get();
+
+        let targetAppId: string;
+        if (!existingAppSnap.empty) {
+          const existingDoc = existingAppSnap.docs[0];
+          targetAppId = existingDoc.id;
+          await existingDoc.ref.update({
+            jobTitle,
+            companyName,
+            rawJobDescription: rawText,
+            extractedMarkdown: placeholderMarkdown,
+            updatedAt: Date.now(),
+          });
+        } else {
+          const newAppRef = appsCol.doc();
+          targetAppId = newAppRef.id;
+          const newApplication: Partial<JobApplication> = {
+            id: targetAppId,
+            jobTitle,
+            companyName,
+            location: data.location || 'Remote / Unspecified',
+            jobUrl: data.url,
+            salaryRange: 'Competitive',
+            targetLevel: 'Senior',
+            stage: 'Targeting', // Still add it to target lane
+            matchScore: 70,
+            rawJobDescription: rawText,
+            extractedMarkdown: placeholderMarkdown,
+            notes: `Auto-ingested to Target lane on ${new Date().toLocaleString()}. Scraping was blocked by host anti-bot challenge.`,
+            contacts: [],
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          };
+          await newAppRef.set(newApplication);
+        }
+
+        // Mark the job URL as failed in job_urls collection
+        await docRef.update({
+          status: 'failed',
+          applicationId: targetAppId,
+          company: companyName,
+          targetRole: jobTitle,
+          error: blockReason,
+          lastTraversedAt: Date.now(),
+        });
+
+        this.stats.processedCount++;
+        this.stats.failureCount++;
+        this.stats.lastError = blockReason;
+        console.log(
+          `[JobUrlWorker] ✔ Placed blocked job "${jobTitle}" @ "${companyName}" into Target lane as failed (App ID: ${targetAppId})`,
+        );
+        return;
+      }
+
+      // Step 4: Check scraped length
       if (!rawText || rawText.trim().length < 200) {
         const reason = `Scraped content is too short (${rawText ? rawText.trim().length : 0} chars) to be a job posting.`;
         console.warn(`[JobUrlWorker] ⛔ REJECTED: ${data.url} - ${reason}`);
