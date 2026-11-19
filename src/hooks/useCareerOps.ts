@@ -278,7 +278,11 @@ export function useCareerOps() {
                     } else if (currentEvent === 'done') {
                       resolve(data);
                     } else if (currentEvent === 'error') {
-                      reject(new Error(data.message));
+                      const err: any = new Error(data.message || 'Failed to extract job details');
+                      if (data.warnings) {
+                        err.warnings = data.warnings;
+                      }
+                      reject(err);
                     }
                   } catch (e) {}
                 }

@@ -449,6 +449,8 @@ careerOpsRouter.post('/extract-job-url', async (req, res) => {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
+  let extractedAiResponse: any = null;
+
   try {
     const { url, jdText } = ExtractJobUrlSchema.parse(req.body);
     let jobDescriptionText = jdText || '';
@@ -543,6 +545,7 @@ careerOpsRouter.post('/extract-job-url', async (req, res) => {
     const extracted = (await orchestrator.handleAction('parse_job_page', {
       domSnippet: jobDescriptionText,
     })) as any;
+    extractedAiResponse = extracted;
     console.log(
       '\n=== AGY RESPONSE (Extract Job) ===\n',
       extracted,
@@ -598,7 +601,57 @@ careerOpsRouter.post('/extract-job-url', async (req, res) => {
     res.end();
   } catch (error: any) {
     console.error('[extract-job-url] Error:', error);
-    sendEvent('error', { message: error.message || 'Failed to extract job details' });
+
+    // Extract warnings from AI response or error
+    const rawWarnings: any[] = [];
+    if (extractedAiResponse) {
+      if (Array.isArray(extractedAiResponse.warnings)) {
+        rawWarnings.push(...extractedAiResponse.warnings);
+      } else if (typeof extractedAiResponse.warnings === 'string') {
+        rawWarnings.push(extractedAiResponse.warnings);
+      }
+      if (Array.isArray(extractedAiResponse.warning)) {
+        rawWarnings.push(...extractedAiResponse.warning);
+      } else if (typeof extractedAiResponse.warning === 'string') {
+        rawWarnings.push(extractedAiResponse.warning);
+      }
+      if (
+        typeof extractedAiResponse.rejectionReason === 'string' &&
+        extractedAiResponse.rejectionReason.trim()
+      ) {
+        rawWarnings.push(extractedAiResponse.rejectionReason.trim());
+      }
+    }
+
+    if (Array.isArray((error as any)?.warnings)) {
+      rawWarnings.push(...(error as any).warnings);
+    }
+    if (typeof (error as any)?.warning === 'string') {
+      rawWarnings.push((error as any).warning);
+    }
+
+    const warningMessages: string[] = Array.from(
+      new Set(
+        rawWarnings
+          .map((w) => (typeof w === 'string' ? w.trim() : JSON.stringify(w)))
+          .filter(Boolean),
+      ),
+    );
+
+    const baseMessage = error?.message || 'Failed to extract job details';
+    let combinedMessage = baseMessage;
+
+    if (warningMessages.length > 0) {
+      const warningsText = warningMessages.join('; ');
+      if (!baseMessage.toLowerCase().includes(warningsText.toLowerCase())) {
+        combinedMessage = `${baseMessage} (AI Warnings: ${warningsText})`;
+      }
+    }
+
+    sendEvent('error', {
+      message: combinedMessage,
+      warnings: warningMessages.length > 0 ? warningMessages : undefined,
+    });
     res.end();
   }
 });

@@ -48,6 +48,7 @@ interface ExtractedJobDetails {
   jobSummary: string;
   responsibilities: string[];
   techStack: string[];
+  warnings?: string[];
 }
 
 /**
@@ -469,6 +470,8 @@ export class JobUrlWorkerService {
       error: null,
     });
 
+    let extracted: ExtractedJobDetails | null = null;
+
     try {
       // Step 2: Scrape job page with Playwright
       let rawText = '';
@@ -605,7 +608,7 @@ export class JobUrlWorkerService {
 
       // Step 5: Extract structured parameters and verify with Gemini
       console.log(`[JobUrlWorker] Verifying & extracting role parameters with Gemini...`);
-      const extracted = await this.extractWithAI(rawText, data.url, {
+      extracted = await this.extractWithAI(rawText, data.url, {
         company: data.company,
         targetRole: data.targetRole,
         location: data.location,
@@ -613,9 +616,12 @@ export class JobUrlWorkerService {
 
       // Step 6: Verify AI classification
       if (!extracted.isJobPosting || extracted.pageType !== 'single_job_posting') {
-        const reason =
+        let reason =
           extracted.rejectionReason ||
           `Identified as ${extracted.pageType}, not a single job opening`;
+        if (extracted.warnings && extracted.warnings.length > 0) {
+          reason = `${reason} (AI Warnings: ${extracted.warnings.join('; ')})`;
+        }
         console.warn(`[JobUrlWorker] ⛔ REJECTED by AI validator: ${data.url} - ${reason}`);
         await docRef.update({
           status: 'failed',
@@ -637,9 +643,12 @@ export class JobUrlWorkerService {
         (extracted.jobSummary && extracted.jobSummary.length > 100);
 
       if (isGenericOrAlertTitle || !hasSubstantiveContent) {
-        const reason = isGenericOrAlertTitle
+        let reason = isGenericOrAlertTitle
           ? 'Extracted title indicates an alert digest or search query.'
           : 'Extracted content lacks concrete qualifications, responsibilities, or role description.';
+        if (extracted.warnings && extracted.warnings.length > 0) {
+          reason = `${reason} (AI Warnings: ${extracted.warnings.join('; ')})`;
+        }
         console.warn(`[JobUrlWorker] ⛔ REJECTED: ${data.url} - ${reason}`);
         await docRef.update({
           status: 'failed',
@@ -746,14 +755,18 @@ export class JobUrlWorkerService {
       return { success: true };
     } catch (err: any) {
       console.error(`[JobUrlWorker] ✖ FAILED: ${data.url}:`, err.message);
+      let errorMsg = err.message || 'Failed to extract job details';
+      if (extracted?.warnings && extracted.warnings.length > 0) {
+        errorMsg = `${errorMsg} (AI Warnings: ${extracted.warnings.join('; ')})`;
+      }
       await docRef.update({
         status: 'failed',
-        error: err.message || 'Failed to extract job details',
+        error: errorMsg,
         lastTraversedAt: Date.now(),
       });
       this.stats.processedCount++;
       this.stats.failureCount++;
-      this.stats.lastError = err.message;
+      this.stats.lastError = errorMsg;
       return { success: false };
     }
   }
@@ -800,6 +813,7 @@ Return ONLY a JSON object with this exact shape:
   "isJobPosting": boolean,
   "pageType": "single_job_posting" | "listing_or_search" | "expired_or_closed" | "company_portal" | "error_page" | "other",
   "rejectionReason": "string (empty if isJobPosting is true)",
+  "warnings": ["string (any caveats, ambiguities, or warnings about page extraction)"],
   "companyName": "string",
   "jobTitle": "string",
   "location": "string",
@@ -828,6 +842,7 @@ Return ONLY a JSON object with this exact shape:
           ],
         },
         rejectionReason: { type: 'string' },
+        warnings: { type: 'array', items: { type: 'string' } },
         companyName: { type: 'string' },
         jobTitle: { type: 'string' },
         location: { type: 'string' },
@@ -960,6 +975,12 @@ Return ONLY a JSON object with this exact shape:
       details.rejectionReason = String(parsed.rejectionReason);
     } else if (!isJob) {
       details.rejectionReason = 'Page does not represent a valid single job posting.';
+    }
+
+    if (Array.isArray(parsed.warnings) && parsed.warnings.length > 0) {
+      details.warnings = parsed.warnings.map((w: any) => String(w).trim()).filter(Boolean);
+    } else if (typeof parsed.warnings === 'string' && parsed.warnings.trim()) {
+      details.warnings = [parsed.warnings.trim()];
     }
 
     return details;
