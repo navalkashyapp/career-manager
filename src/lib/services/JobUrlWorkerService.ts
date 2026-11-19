@@ -680,6 +680,7 @@ export class JobUrlWorkerService {
 
       // Step 9: Ingest into user's applications collection under 'Targeting' stage
       const appsCol = adminDb.collection('users').doc(userId).collection('applications');
+      const sanitizedJdJson = JSON.parse(JSON.stringify(extracted));
 
       // Check if application for this job URL already exists to avoid duplicates
       const existingAppSnap = await appsCol.where('jobUrl', '==', data.url).limit(1).get();
@@ -699,7 +700,7 @@ export class JobUrlWorkerService {
           targetLevel: extracted.targetLevel,
           rawJobDescription: rawText,
           extractedMarkdown: generatedMarkdown,
-          cleanedJdJson: extracted,
+          cleanedJdJson: sanitizedJdJson,
           updatedAt: Date.now(),
         });
       } else {
@@ -717,7 +718,7 @@ export class JobUrlWorkerService {
           matchScore: 85,
           rawJobDescription: rawText,
           extractedMarkdown: generatedMarkdown,
-          cleanedJdJson: extracted,
+          cleanedJdJson: sanitizedJdJson,
           notes: `Auto-ingested to Target lane by backend background worker on ${new Date().toLocaleString()}. Verified active job posting.`,
           contacts: [],
           createdAt: Date.now(),
@@ -941,12 +942,9 @@ Return ONLY a JSON object with this exact shape:
   ): ExtractedJobDetails {
     const isJob = parsed.isJobPosting === true && parsed.pageType === 'single_job_posting';
 
-    return {
+    const details: ExtractedJobDetails = {
       isJobPosting: isJob,
       pageType: parsed.pageType || (isJob ? 'single_job_posting' : 'other'),
-      rejectionReason:
-        parsed.rejectionReason ||
-        (isJob ? undefined : 'Page does not represent a valid single job posting.'),
       companyName: parsed.companyName || fallback.company || 'Unknown Company',
       jobTitle: parsed.jobTitle || fallback.targetRole || 'Technical Program Manager',
       location: parsed.location || fallback.location || 'Remote / Unspecified',
@@ -957,5 +955,13 @@ Return ONLY a JSON object with this exact shape:
       responsibilities: Array.isArray(parsed.responsibilities) ? parsed.responsibilities : [],
       techStack: Array.isArray(parsed.techStack) ? parsed.techStack : [],
     };
+
+    if (parsed.rejectionReason) {
+      details.rejectionReason = String(parsed.rejectionReason);
+    } else if (!isJob) {
+      details.rejectionReason = 'Page does not represent a valid single job posting.';
+    }
+
+    return details;
   }
 }
