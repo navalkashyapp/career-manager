@@ -1,6 +1,7 @@
 import { adminDb } from '../firebaseAdmin';
 import { JobScraperService } from './JobScraperService';
 import { PushNotificationService } from './PushNotificationService';
+import { AgyCliService } from './AgyCliService';
 import { GoogleGenAI } from '@google/genai';
 import { GEMINI_MODELS } from '../../config/gemini';
 import type { JobApplication, JobUrlEntry } from '../../types';
@@ -757,7 +758,8 @@ export class JobUrlWorkerService {
   }
 
   /**
-   * Helper to verify that text is an active, single job posting and extract role parameters with Gemini.
+   * Helper to verify that text is an active, single job posting and extract role parameters.
+   * Prioritizes Antigravity CLI ('agy') when available, falling back gracefully to Gemini API.
    */
   private static async extractWithAI(
     jdText: string,
@@ -809,7 +811,92 @@ Return ONLY a JSON object with this exact shape:
 }
 `;
 
+    const extractionSchema = {
+      type: 'object',
+      properties: {
+        isJobPosting: { type: 'boolean' },
+        pageType: {
+          type: 'string',
+          enum: [
+            'single_job_posting',
+            'listing_or_search',
+            'expired_or_closed',
+            'company_portal',
+            'error_page',
+            'other',
+          ],
+        },
+        rejectionReason: { type: 'string' },
+        companyName: { type: 'string' },
+        jobTitle: { type: 'string' },
+        location: { type: 'string' },
+        salaryRange: { type: 'string' },
+        targetLevel: { type: 'string' },
+        requirements: { type: 'array', items: { type: 'string' } },
+        jobSummary: { type: 'string' },
+        responsibilities: { type: 'array', items: { type: 'string' } },
+        techStack: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['isJobPosting', 'pageType', 'companyName', 'jobTitle'],
+    };
+
+    const parseJsonSafely = (text: string): any => {
+      if (!text) return null;
+      const trimmed = text.trim();
+      const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+      if (fenceMatch) {
+        try {
+          return JSON.parse(fenceMatch[1]);
+        } catch {}
+      }
+      const start = trimmed.indexOf('{');
+      const end = trimmed.lastIndexOf('}');
+      if (start !== -1 && end !== -1 && end > start) {
+        try {
+          return JSON.parse(trimmed.slice(start, end + 1));
+        } catch {}
+      }
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        return null;
+      }
+    };
+
+    const useLocalCli =
+      process.env.USE_LOCAL_CLI !== 'false' &&
+      (process.env.USE_LOCAL_CLI === 'true' || process.env.VITE_USE_LOCAL_CLI === 'true');
+
+    // 1. Prioritize Antigravity CLI ('agy') if enabled and available
+    if (useLocalCli && AgyCliService.isAvailable()) {
+      try {
+        console.log(
+          `[JobUrlWorker] Prioritizing Antigravity CLI ('agy') for job validation & extraction...`,
+        );
+        const cliOutput = await AgyCliService.executePrompt(prompt, extractionSchema, {
+          timeoutMs: 120000,
+          debug: false,
+        });
+
+        const parsedCli = parseJsonSafely(cliOutput);
+        if (parsedCli && typeof parsedCli === 'object' && 'isJobPosting' in parsedCli) {
+          console.log(`[JobUrlWorker] ✔ Successfully extracted job details via Antigravity CLI.`);
+          return this.formatExtractedDetails(parsedCli, fallback);
+        } else {
+          console.warn(
+            `[JobUrlWorker] Antigravity CLI returned unstructured text. Falling back to Gemini API...`,
+          );
+        }
+      } catch (cliErr: any) {
+        console.warn(
+          `[JobUrlWorker] Antigravity CLI extraction notice (${cliErr.message}). Falling back to Gemini API...`,
+        );
+      }
+    }
+
+    // 2. Fallback to GoogleGenAI SDK
     try {
+      console.log(`[JobUrlWorker] Executing job validation & extraction via Gemini API...`);
       const apiKey =
         process.env.GEMINI_API_KEY ||
         process.env.GEMINI_API_KEY_1 ||
@@ -824,27 +911,10 @@ Return ONLY a JSON object with this exact shape:
         },
       });
 
-      const parsed = JSON.parse(response.text || '{}');
-      const isJob = parsed.isJobPosting === true && parsed.pageType === 'single_job_posting';
-
-      return {
-        isJobPosting: isJob,
-        pageType: parsed.pageType || (isJob ? 'single_job_posting' : 'other'),
-        rejectionReason:
-          parsed.rejectionReason ||
-          (isJob ? undefined : 'Page does not represent a valid single job posting.'),
-        companyName: parsed.companyName || fallback.company || 'Unknown Company',
-        jobTitle: parsed.jobTitle || fallback.targetRole || 'Technical Program Manager',
-        location: parsed.location || fallback.location || 'Remote / Unspecified',
-        salaryRange: parsed.salaryRange || 'Competitive',
-        targetLevel: parsed.targetLevel || 'Senior',
-        requirements: Array.isArray(parsed.requirements) ? parsed.requirements : [],
-        jobSummary: parsed.jobSummary || '',
-        responsibilities: Array.isArray(parsed.responsibilities) ? parsed.responsibilities : [],
-        techStack: Array.isArray(parsed.techStack) ? parsed.techStack : [],
-      };
+      const parsed = parseJsonSafely(response.text || '{}') || {};
+      return this.formatExtractedDetails(parsed, fallback);
     } catch (err: any) {
-      console.warn('[JobUrlWorker] AI extraction notice:', err.message);
+      console.warn('[JobUrlWorker] Gemini AI extraction notice:', err.message);
       return {
         isJobPosting: false,
         pageType: 'error_page',
@@ -860,5 +930,32 @@ Return ONLY a JSON object with this exact shape:
         techStack: [],
       };
     }
+  }
+
+  /**
+   * Standardizes raw AI parsed data into ExtractedJobDetails with fallbacks.
+   */
+  private static formatExtractedDetails(
+    parsed: any,
+    fallback: { company?: string; targetRole?: string; location?: string },
+  ): ExtractedJobDetails {
+    const isJob = parsed.isJobPosting === true && parsed.pageType === 'single_job_posting';
+
+    return {
+      isJobPosting: isJob,
+      pageType: parsed.pageType || (isJob ? 'single_job_posting' : 'other'),
+      rejectionReason:
+        parsed.rejectionReason ||
+        (isJob ? undefined : 'Page does not represent a valid single job posting.'),
+      companyName: parsed.companyName || fallback.company || 'Unknown Company',
+      jobTitle: parsed.jobTitle || fallback.targetRole || 'Technical Program Manager',
+      location: parsed.location || fallback.location || 'Remote / Unspecified',
+      salaryRange: parsed.salaryRange || 'Competitive',
+      targetLevel: parsed.targetLevel || 'Senior',
+      requirements: Array.isArray(parsed.requirements) ? parsed.requirements : [],
+      jobSummary: parsed.jobSummary || '',
+      responsibilities: Array.isArray(parsed.responsibilities) ? parsed.responsibilities : [],
+      techStack: Array.isArray(parsed.techStack) ? parsed.techStack : [],
+    };
   }
 }
