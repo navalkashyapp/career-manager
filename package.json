@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outfile=dist/server.js && cp career-ops/tracker-aliases.json dist/",
-    "start": "NODE_ENV=production node dist/server.js",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outfile=dist-server/server.js && cp career-ops/tracker-aliases.json dist-server/",
+    "start": "NODE_ENV=production node dist-server/server.js",
     "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
+    "clean": "rm -rf dist dist-server server.js",
     "tunnel": "./scripts/start-tunnel.sh",
     "ngrok": "ngrok http 3000 --url=uncolored-enzyme-unsightly.ngrok-free.dev",
     "lint": "tsc --noEmit",

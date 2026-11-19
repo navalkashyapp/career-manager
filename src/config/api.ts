@@ -1,3 +1,5 @@
+import { getIdTokenSafe } from '../store/firebase';
+
 export function getApiBaseUrl(): string {
   if (typeof window === 'undefined') {
     return 'http://localhost:3000';
@@ -17,7 +19,22 @@ export function apiUrl(path: string): string {
 
 export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   try {
-    const response = await fetch(input, init);
+    const headers = new Headers(init?.headers);
+    if (!headers.has('Authorization')) {
+      try {
+        const token = await getIdTokenSafe();
+        if (token) {
+          headers.set('Authorization', `Bearer ${token}`);
+        }
+      } catch {
+        // Continue without auth header if token resolution fails
+      }
+    }
+
+    const response = await fetch(input, {
+      ...init,
+      headers,
+    });
     return response;
   } catch (error: any) {
     if (error.name === 'TypeError' && error.message === 'Failed to fetch') {

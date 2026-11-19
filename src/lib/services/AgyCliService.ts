@@ -1,5 +1,6 @@
 export class AgyCliService {
   private static resolvedAgyPath: string | null = null;
+  private static cachedIsAvailable: boolean | null = null;
 
   /**
    * Resolves the agy binary path in Node.js, or falls back to 'agy'.
@@ -13,21 +14,22 @@ export class AgyCliService {
 
     if (typeof process !== 'undefined' && process.env?.AGY_BIN_PATH) {
       this.resolvedAgyPath = process.env.AGY_BIN_PATH;
+      this.cachedIsAvailable = true;
       return this.resolvedAgyPath;
     }
 
     try {
       const fs = await import(/* @vite-ignore */ 'fs');
       const candidatePaths = [
-        '/home/naval/.local/bin/agy',
-        '/usr/local/bin/agy',
         process.env.HOME ? `${process.env.HOME}/.local/bin/agy` : '',
+        '/usr/local/bin/agy',
         '/usr/bin/agy',
       ].filter(Boolean) as string[];
 
       for (const p of candidatePaths) {
         if (fs.existsSync(p)) {
           this.resolvedAgyPath = p;
+          this.cachedIsAvailable = true;
           return this.resolvedAgyPath;
         }
       }
@@ -41,7 +43,45 @@ export class AgyCliService {
    * Checks whether the agy CLI binary is accessible on the system.
    */
   public static isAvailable(): boolean {
-    return true;
+    if (typeof window !== 'undefined') {
+      return true; // In browser, routes via authenticated backend proxy
+    }
+
+    if (this.cachedIsAvailable !== null) {
+      return this.cachedIsAvailable;
+    }
+
+    if (process.env?.AGY_BIN_PATH) {
+      this.cachedIsAvailable = true;
+      return true;
+    }
+
+    try {
+      const candidatePaths = [
+        process.env.HOME ? `${process.env.HOME}/.local/bin/agy` : '',
+        '/usr/local/bin/agy',
+        '/usr/bin/agy',
+      ].filter(Boolean) as string[];
+
+      const fs = (globalThis as any).process?.versions?.node
+        ? typeof require !== 'undefined'
+          ? require('fs')
+          : null
+        : null;
+
+      if (fs) {
+        for (const p of candidatePaths) {
+          if (fs.existsSync(p)) {
+            this.resolvedAgyPath = p;
+            this.cachedIsAvailable = true;
+            return true;
+          }
+        }
+      }
+    } catch {}
+
+    this.cachedIsAvailable = this.resolvedAgyPath !== null;
+    return this.cachedIsAvailable;
   }
 
   /**
@@ -64,9 +104,25 @@ export class AgyCliService {
     // 1. Browser environment: route to backend proxy
     if (typeof window !== 'undefined') {
       const baseUrl = (typeof process !== 'undefined' && process.env?.VITE_BACKEND_URL) || '';
-      const res = await fetch(`${baseUrl}/api/gemini/agy-proxy`, {
+      const endpoint = baseUrl ? `${baseUrl}/api/gemini/agy-proxy` : '/api/gemini/agy-proxy';
+
+      const token = await (async () => {
+        try {
+          const { getIdTokenSafe } = await import('../../store/firebase');
+          return await getIdTokenSafe();
+        } catch {
+          return null;
+        }
+      })();
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const res = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ prompt: fullPrompt }),
       });
       if (!res.ok) {

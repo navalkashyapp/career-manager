@@ -1,12 +1,10 @@
 import express from 'express';
-import { adminDb, adminAuth } from '../firebaseAdmin';
+import { adminDb } from '../firebaseAdmin';
 import { GoogleGenAI } from '@google/genai';
 import { OrchestratorAgent, JobEvaluation, TailorResult } from '../../agents/OrchestratorAgent';
 import { UserProfile } from '../../agents/ResumeTailorAgent';
 import { GEMINI_MODELS } from '../../config/gemini';
-
-import { COMMANDS as tracker } from '../../../career-ops/tracker.mjs';
-import { DataParserService } from '../services/DataParserService';
+import { requireAuth } from '../middleware/auth';
 import { PushNotificationService } from '../services/PushNotificationService';
 import path from 'path';
 import { z } from 'zod';
@@ -23,33 +21,14 @@ const execFileAsync = util.promisify(execFile);
 
 export const careerOpsRouter = express.Router();
 
-// Authentication Middleware
-careerOpsRouter.use(async (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized: Missing or invalid Authorization header' });
+// Authentication Middleware (skips public VAPID key)
+careerOpsRouter.use((req, res, next) => {
+  if (req.path === '/notifications/vapid-key') {
+    return next();
   }
-
-  const token = authHeader.split('Bearer ')[1];
-  try {
-    const decodedToken = await adminAuth.verifyIdToken(token);
-
-    // Restrict to ONLY the authorized user
-    const allowedEmails = ['kashyapnaval35@gmail.com', 'navalkashyaap@gmail.com'];
-    if (!allowedEmails.includes(decodedToken.email || '')) {
-      return res.status(403).json({ error: 'Forbidden: Email not authorized' });
-    }
-
-    // Pass user info to request
-    (req as any).user = decodedToken;
-    next();
-  } catch (error) {
-    console.error('Token verification failed:', error);
-    return res.status(401).json({ error: 'Unauthorized: Invalid token' });
-  }
+  return requireAuth(req, res, next);
 });
 
-const dataParser = new DataParserService(path.resolve(process.cwd(), 'career-ops'));
 const careerOpsPath = path.resolve(process.cwd(), 'career-ops');
 
 // ---------------------------------------------------------------------------

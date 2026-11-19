@@ -16,7 +16,6 @@ import {
   X,
   PanelLeftClose,
   PanelLeftOpen,
-  Activity,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
@@ -40,7 +39,6 @@ const navItems = [
 export default function Layout() {
   const [needsAuth, setNeedsAuth] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [, setUserProfile] = useState<any>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarMinimized, setIsSidebarMinimized] = useState(() => {
     try {
@@ -71,15 +69,12 @@ export default function Layout() {
         if (user && !allowedEmails.includes(user.email || '')) {
           await logout();
           setNeedsAuth(true);
-          setUserProfile(null);
           return;
         }
-        setUserProfile(user);
         setNeedsAuth(false);
       },
       () => {
         setNeedsAuth(true);
-        setUserProfile(null);
       },
     );
     return () => unsubscribe();

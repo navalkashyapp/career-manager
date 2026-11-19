@@ -1,4 +1,4 @@
-import { adminDb, adminAuth } from '../src/lib/firebaseAdmin';
+import { adminDb } from '../src/lib/firebaseAdmin';
 
 export const INITIAL_JOB_URLS = [
   {

@@ -46,6 +46,7 @@ RUN npx playwright install --with-deps chromium
 
 # Copy build artifacts from builder stage
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/dist-server ./dist-server
 
 # Copy supporting assets and runtime modules
 COPY career-ops/ ./career-ops/
@@ -63,4 +64,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD curl -f http://localhost:3000/api/health || exit 1
 
 # Start production server
-CMD ["node", "dist/server.js"]
+CMD ["node", "dist-server/server.js"]

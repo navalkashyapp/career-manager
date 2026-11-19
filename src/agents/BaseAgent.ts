@@ -1,6 +1,5 @@
 import { GoogleGenAI, Schema } from '@google/genai';
 import { GEMINI_MODELS, getFallbackModels } from '../config/gemini';
-import { callGeminiApi } from '../lib/utils/geminiClient';
 import { withExponentialBackoff } from '../lib/utils/withExponentialBackoff';
 import { AgyCliService } from '../lib/services/AgyCliService';
 

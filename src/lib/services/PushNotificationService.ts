@@ -2,6 +2,7 @@ import * as webpushModule from 'web-push';
 import { adminDb, adminMessaging } from '../firebaseAdmin';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 
 const webpush = (webpushModule as any).default || webpushModule;
 
@@ -121,7 +122,7 @@ export class PushNotificationService {
     let record: StoredSubscription;
 
     if (data.subscription && data.subscription.endpoint) {
-      subId = Buffer.from(data.subscription.endpoint).toString('base64url').slice(0, 64);
+      subId = crypto.createHash('sha256').update(data.subscription.endpoint).digest('hex');
       record = {
         id: subId,
         type: 'web-push',
@@ -132,7 +133,7 @@ export class PushNotificationService {
         lastActiveAt: Date.now(),
       };
     } else if (data.token) {
-      subId = Buffer.from(data.token).toString('base64url').slice(0, 64);
+      subId = crypto.createHash('sha256').update(data.token).digest('hex');
       record = {
         id: subId,
         type: 'fcm',

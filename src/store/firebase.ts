@@ -25,7 +25,10 @@ provider.addScope('https://www.googleapis.com/auth/tasks');
 provider.addScope('https://www.googleapis.com/auth/chat.messages');
 
 let isSigningIn = false;
-let cachedAccessToken: string | null = localStorage.getItem('googleAccessToken');
+let cachedAccessToken: string | null =
+  typeof window !== 'undefined' && typeof localStorage !== 'undefined'
+    ? localStorage.getItem('googleAccessToken')
+    : null;
 
 export const getIdTokenSafe = async (): Promise<string | null> => {
   if (auth.currentUser) {

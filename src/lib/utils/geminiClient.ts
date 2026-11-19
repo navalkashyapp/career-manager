@@ -2,8 +2,6 @@ import { GoogleGenAI } from '@google/genai';
 import { withExponentialBackoff } from './withExponentialBackoff';
 import { getFallbackModels } from '../../config/gemini';
 
-let ai: GoogleGenAI;
-
 export async function callGeminiApi(options: {
   model: string;
   fallbackModels?: string | string[];
@@ -36,6 +34,7 @@ export async function callGeminiApi(options: {
     return undefined;
   };
 
+  const isDebug = getEnv('DEBUG') === 'true';
   const useLocalCli = getEnv('USE_LOCAL_CLI') === 'true';
 
   if (useLocalCli) {
@@ -44,14 +43,32 @@ export async function callGeminiApi(options: {
     const isBrowser = typeof window !== 'undefined';
     const baseUrl = isBrowser ? getEnv('BACKEND_URL') || '' : 'http://localhost:3000';
 
-    // We stringify the contents if they are an array (e.g. multimodal)
-    // although CLI currently is best for text.
+    // Stringify contents for text CLI
     const promptText = typeof contents === 'string' ? contents : JSON.stringify(contents);
-    console.log('[AGY CLI Request Prompt]:\n', promptText);
+    if (isDebug) {
+      console.log('[AGY CLI Request Prompt]:\n', promptText);
+    } else {
+      console.log(`[AGY CLI Request Prompt Length]: ${promptText.length} chars`);
+    }
+
+    const token = await (async () => {
+      if (!isBrowser) return null;
+      try {
+        const { getIdTokenSafe } = await import('../../store/firebase');
+        return await getIdTokenSafe();
+      } catch {
+        return null;
+      }
+    })();
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
 
     const res = await fetch(`${baseUrl}/api/gemini/agy-proxy`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ prompt: promptText }),
     });
 
@@ -62,7 +79,11 @@ export async function callGeminiApi(options: {
 
     const data = await res.json();
     console.log('='.repeat(60));
-    console.log('[AGY CLI Response] Response Text:\n', data.text);
+    if (isDebug) {
+      console.log('[AGY CLI Response] Response Text:\n', data.text);
+    } else {
+      console.log(`[AGY CLI Response] Length: ${data.text?.length ?? 0} chars`);
+    }
     console.log('='.repeat(60));
     return {
       text: data.text,
@@ -82,12 +103,18 @@ export async function callGeminiApi(options: {
 
   console.log('='.repeat(60));
   console.log(`[Gemini API Request] Model: ${model}`);
-  console.log(
-    `[Gemini API Request] Contents:\n`,
-    typeof contents === 'string' ? contents : JSON.stringify(contents, null, 2),
-  );
-  if (config) {
-    console.log(`[Gemini API Request] Config:\n`, JSON.stringify(config, null, 2));
+  if (isDebug) {
+    console.log(
+      `[Gemini API Request] Contents:\n`,
+      typeof contents === 'string' ? contents : JSON.stringify(contents, null, 2),
+    );
+    if (config) {
+      console.log(`[Gemini API Request] Config:\n`, JSON.stringify(config, null, 2));
+    }
+  } else {
+    const payloadLen =
+      typeof contents === 'string' ? contents.length : JSON.stringify(contents).length;
+    console.log(`[Gemini API Request] Payload size: ${payloadLen} chars`);
   }
   console.log('='.repeat(60));
 
@@ -116,8 +143,14 @@ export async function callGeminiApi(options: {
 
   console.log('='.repeat(60));
   console.log(`[Gemini API Response] Model: ${usedModel}`);
-  console.log(`[Gemini API Response] Usage:\n`, JSON.stringify(response.usageMetadata, null, 2));
-  console.log(`[Gemini API Response] Response Text:\n`, response.text);
+  if (response.usageMetadata) {
+    console.log(`[Gemini API Response] Usage:\n`, JSON.stringify(response.usageMetadata, null, 2));
+  }
+  if (isDebug) {
+    console.log(`[Gemini API Response] Response Text:\n`, response.text);
+  } else {
+    console.log(`[Gemini API Response] Output length: ${response.text?.length ?? 0} chars`);
+  }
   console.log('='.repeat(60));
 
   return response;

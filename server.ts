@@ -1,6 +1,4 @@
-import { exec, execFile } from 'child_process';
-import { promisify } from 'util';
-// removed local promisify
+import { execFile } from 'child_process';
 import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
@@ -20,6 +18,7 @@ import * as fs from 'fs';
 import { z } from 'zod';
 import { careerOpsRouter } from './src/lib/api/careerOpsRouter';
 import { callGeminiApi } from './src/lib/utils/geminiClient';
+import { requireAuth } from './src/lib/middleware/auth';
 
 function safeParseJSON(text: string) {
   if (!text) return {};
@@ -147,8 +146,8 @@ async function startServer() {
     res.json({ status: 'ok', timestamp: Date.now() });
   });
 
-  // Background Job URLs Worker Endpoints (Mounted before auth-restricted router)
-  app.get(['/api/career-ops/job-urls/status', '/api/job-urls/status'], (req, res) => {
+  // Background Job URLs Worker Endpoints (Protected by auth)
+  app.get(['/api/career-ops/job-urls/status', '/api/job-urls/status'], requireAuth, (req, res) => {
     try {
       res.json(JobUrlWorkerService.getStatus());
     } catch (error: any) {
@@ -156,17 +155,21 @@ async function startServer() {
     }
   });
 
-  app.post(['/api/career-ops/job-urls/trigger', '/api/job-urls/trigger'], async (req, res) => {
-    try {
-      const { forceAll, userId } = req.body || {};
-      const result = await JobUrlWorkerService.triggerNow({ forceAll, userId });
-      res.json(result);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
+  app.post(
+    ['/api/career-ops/job-urls/trigger', '/api/job-urls/trigger'],
+    requireAuth,
+    async (req, res) => {
+      try {
+        const { forceAll, userId } = req.body || {};
+        const result = await JobUrlWorkerService.triggerNow({ forceAll, userId });
+        res.json(result);
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    },
+  );
 
-  app.post(['/api/career-ops/job-urls/toggle', '/api/job-urls/toggle'], (req, res) => {
+  app.post(['/api/career-ops/job-urls/toggle', '/api/job-urls/toggle'], requireAuth, (req, res) => {
     try {
       const { enable } = req.body || {};
       if (enable) {
@@ -180,8 +183,11 @@ async function startServer() {
     }
   });
 
-  // Mount the new career-ops router
+  // Mount the career-ops router
   app.use('/api/career-ops', careerOpsRouter);
+
+  // Require authentication for all Gemini AI endpoints
+  app.use('/api/gemini', requireAuth);
 
   // Notifications public vapid key endpoint
   app.get(
@@ -420,9 +426,13 @@ Summarize the thread into key action items for the candidate. Return the result 
   app.post('/api/gemini/agy-proxy', async (req, res) => {
     try {
       const { prompt } = req.body;
-      console.log('\n=== AGY PROXY REQUEST ===\n', prompt, '\n=========================\n');
+      if (process.env.DEBUG === 'true') {
+        console.log('\n=== AGY PROXY REQUEST ===\n', prompt, '\n=========================\n');
+      }
       const text = await AgyCliService.executePrompt(prompt);
-      console.log('\n=== AGY PROXY RESPONSE ===\n', text, '\n==========================\n');
+      if (process.env.DEBUG === 'true') {
+        console.log('\n=== AGY PROXY RESPONSE ===\n', text, '\n==========================\n');
+      }
       res.json({ text });
     } catch (error: any) {
       console.error('AGY CLI Proxy error:', error, error.stderr);
@@ -443,7 +453,7 @@ Summarize the thread into key action items for the candidate. Return the result 
     }
   });
 
-  app.post('/api/career-ops/scrape-job', async (req, res) => {
+  app.post('/api/career-ops/scrape-job', requireAuth, async (req, res) => {
     try {
       const { url } = req.body;
       const text = await JobScraperService.scrapeJobPosting(url);
@@ -454,7 +464,7 @@ Summarize the thread into key action items for the candidate. Return the result 
     }
   });
 
-  app.post('/api/career-ops/generate-pdf', async (req, res) => {
+  app.post('/api/career-ops/generate-pdf', requireAuth, async (req, res) => {
     try {
       const { html } = req.body;
       const pdfBuffer = await PdfGeneratorService.generatePdf(html);
@@ -466,7 +476,7 @@ Summarize the thread into key action items for the candidate. Return the result 
     }
   });
 
-  app.post('/api/career-ops/trigger-connector', async (req, res) => {
+  app.post('/api/career-ops/trigger-connector', requireAuth, async (req, res) => {
     try {
       const { keywords, profileData } = req.body;
       if (!keywords || !profileData) {
@@ -485,7 +495,7 @@ Summarize the thread into key action items for the candidate. Return the result 
     }
   });
 
-  app.get('/api/career-ops/local-jobs', async (req, res) => {
+  app.get('/api/career-ops/local-jobs', requireAuth, async (req, res) => {
     try {
       const storePath = path.join(process.cwd(), 'src', 'store', 'local-jobs.json');
       if (fs.existsSync(storePath)) {
@@ -611,7 +621,7 @@ Summarize the thread into key action items for the candidate. Return the result 
     }
   });
 
-  app.post('/api/career-ops/run', (req, res) => {
+  app.post('/api/career-ops/run', requireAuth, (req, res) => {
     const { script, args } = req.body;
     const allowedScripts = ['doctor', 'gemini:eval', 'scan:full'];
 
@@ -619,9 +629,31 @@ Summarize the thread into key action items for the candidate. Return the result 
       return res.status(400).json({ error: 'Script not allowed' });
     }
 
-    const command = `cd src/career-ops && npm run ${script} -- ${args || ''}`;
+    const sanitizedArgs: string[] = [];
+    if (Array.isArray(args)) {
+      for (const arg of args) {
+        if (typeof arg !== 'string' || !/^[a-zA-Z0-9_\-\.\/=]+$/.test(arg)) {
+          return res.status(400).json({ error: 'Invalid argument format' });
+        }
+        sanitizedArgs.push(arg);
+      }
+    } else if (typeof args === 'string' && args.trim().length > 0) {
+      const parts = args.trim().split(/\s+/);
+      for (const part of parts) {
+        if (!/^[a-zA-Z0-9_\-\.\/=]+$/.test(part)) {
+          return res.status(400).json({ error: 'Invalid argument format' });
+        }
+        sanitizedArgs.push(part);
+      }
+    }
 
-    exec(command, (error, stdout, stderr) => {
+    const careerOpsDir = path.join(process.cwd(), 'career-ops');
+    const cmdArgs = ['run', script];
+    if (sanitizedArgs.length > 0) {
+      cmdArgs.push('--', ...sanitizedArgs);
+    }
+
+    execFile('npm', cmdArgs, { cwd: careerOpsDir }, (error, stdout, stderr) => {
       if (error) {
         console.error('Career ops execution error:', error);
         return res.status(500).json({ error: error.message, stderr, stdout });

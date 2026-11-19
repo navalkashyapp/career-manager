@@ -22,7 +22,11 @@ export const GEMINI_FALLBACK_CASCADES: Record<string, string[]> = {
     'gemini-3.1-flash-lite',
     'gemini-3.7-flash',
   ],
-  'gemini-3.1-pro-preview': ['gemini-3.8-flash', 'gemini-3.8-flash', 'gemini-flash-lite-latest'],
+  'gemini-3.1-pro-preview': [
+    'gemini-3.8-flash',
+    'gemini-flash-lite-latest',
+    'gemini-3.1-flash-lite',
+  ],
 };
 
 export function getFallbackModels(primaryModel: string): string[] {
