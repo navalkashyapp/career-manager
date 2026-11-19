@@ -1,5 +1,6 @@
 import { adminDb } from '../firebaseAdmin';
 import { JobScraperService } from './JobScraperService';
+import { PushNotificationService } from './PushNotificationService';
 import { GoogleGenAI } from '@google/genai';
 import { GEMINI_MODELS } from '../../config/gemini';
 import type { JobApplication, JobUrlEntry } from '../../types';
@@ -383,11 +384,18 @@ export class JobUrlWorkerService {
     );
 
     let processedThisBatch = 0;
+    let successCount = 0;
+    let failureCount = 0;
 
     for (const doc of snapshot.docs) {
       const data = doc.data() as JobUrlEntry;
-      await this.processOneJob(userId, doc.id, data);
+      const jobResult = await this.processOneJob(userId, doc.id, data);
       processedThisBatch++;
+      if (jobResult.success) {
+        successCount++;
+      } else {
+        failureCount++;
+      }
 
       // Polite delay between jobs to respect remote hosts & Gemini quotas (default 65s)
       if (processedThisBatch < snapshot.size) {
@@ -397,6 +405,25 @@ export class JobUrlWorkerService {
           )}s before fetching next job...`,
         );
         await new Promise((resolve) => setTimeout(resolve, this.delayBetweenJobsMs));
+      }
+    }
+
+    // Send push notification to user after finishing batch
+    if (processedThisBatch > 0) {
+      console.log(
+        `[JobUrlWorker] Finished import queue for user ${userId}. Total: ${processedThisBatch}, Success: ${successCount}, Failed: ${failureCount}. Sending push notification...`,
+      );
+      try {
+        await PushNotificationService.sendDailyImportNotification(userId, {
+          total: processedThisBatch,
+          success: successCount,
+          failed: failureCount,
+        });
+      } catch (notifErr: any) {
+        console.error(
+          `[JobUrlWorker] Failed to send import completion push notification for user ${userId}:`,
+          notifErr.message,
+        );
       }
     }
 
@@ -411,7 +438,7 @@ export class JobUrlWorkerService {
     userId: string,
     docId: string,
     data: JobUrlEntry,
-  ): Promise<void> {
+  ): Promise<{ success: boolean }> {
     const docRef = adminDb.collection('users').doc(userId).collection('job_urls').doc(docId);
     this.currentJob = { url: data.url, company: data.company, targetRole: data.targetRole };
 
@@ -431,7 +458,7 @@ export class JobUrlWorkerService {
       this.stats.processedCount++;
       this.stats.failureCount++;
       this.stats.lastError = urlCheck.reason;
-      return;
+      return { success: false };
     }
 
     // Step 1: Update status to 'traversing'
@@ -458,7 +485,7 @@ export class JobUrlWorkerService {
         this.stats.processedCount++;
         this.stats.failureCount++;
         this.stats.lastError = scrapeErr.message;
-        return;
+        return { success: false };
       }
 
       // Step 3: Check if scraping hit an anti-bot security challenge or "you have been blocked" page
@@ -541,7 +568,7 @@ export class JobUrlWorkerService {
         console.log(
           `[JobUrlWorker] ✔ Placed blocked job "${jobTitle}" @ "${companyName}" into Target lane as failed (App ID: ${targetAppId})`,
         );
-        return;
+        return { success: false };
       }
 
       // Step 4: Check scraped length
@@ -556,7 +583,7 @@ export class JobUrlWorkerService {
         this.stats.processedCount++;
         this.stats.failureCount++;
         this.stats.lastError = reason;
-        return;
+        return { success: false };
       }
 
       // Step 4: Check for closed, expired, or 404 signals in text
@@ -572,7 +599,7 @@ export class JobUrlWorkerService {
         this.stats.processedCount++;
         this.stats.failureCount++;
         this.stats.lastError = reason;
-        return;
+        return { success: false };
       }
 
       // Step 5: Extract structured parameters and verify with Gemini
@@ -597,7 +624,7 @@ export class JobUrlWorkerService {
         this.stats.processedCount++;
         this.stats.failureCount++;
         this.stats.lastError = reason;
-        return;
+        return { success: false };
       }
 
       // Step 7: Content sufficiency check (must have title, not be a digest/alert, and have real requirements/summary)
@@ -621,7 +648,7 @@ export class JobUrlWorkerService {
         this.stats.processedCount++;
         this.stats.failureCount++;
         this.stats.lastError = reason;
-        return;
+        return { success: false };
       }
 
       // Step 8: Build generated Markdown
@@ -714,6 +741,7 @@ export class JobUrlWorkerService {
       console.log(
         `[JobUrlWorker] ✔ SUCCESS: Verified & added "${extracted.jobTitle}" @ "${extracted.companyName}" into Targeting lane (App ID: ${targetAppId})`,
       );
+      return { success: true };
     } catch (err: any) {
       console.error(`[JobUrlWorker] ✖ FAILED: ${data.url}:`, err.message);
       await docRef.update({
@@ -724,6 +752,7 @@ export class JobUrlWorkerService {
       this.stats.processedCount++;
       this.stats.failureCount++;
       this.stats.lastError = err.message;
+      return { success: false };
     }
   }
 

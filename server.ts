@@ -14,6 +14,7 @@ import { JobScraperService } from './src/lib/services/JobScraperService';
 import { PdfGeneratorService } from './src/lib/services/PdfGeneratorService';
 import { LocalConnectorService } from './src/lib/services/LocalConnectorService';
 import { JobUrlWorkerService } from './src/lib/services/JobUrlWorkerService';
+import { PushNotificationService } from './src/lib/services/PushNotificationService';
 import { AgyCliService } from './src/lib/services/AgyCliService';
 import * as fs from 'fs';
 import { z } from 'zod';
@@ -181,6 +182,19 @@ async function startServer() {
 
   // Mount the new career-ops router
   app.use('/api/career-ops', careerOpsRouter);
+
+  // Notifications public vapid key endpoint
+  app.get(
+    ['/api/notifications/vapid-key', '/api/career-ops/notifications/vapid-key'],
+    (req, res) => {
+      try {
+        const vapidPublicKey = PushNotificationService.getPublicKey();
+        res.json({ vapidPublicKey });
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    },
+  );
 
   // Validation Schemas
   const JobPayloadSchema = z.object({
@@ -639,6 +653,9 @@ Summarize the thread into key action items for the candidate. Return the result 
   server.headersTimeout = 10000; // 10s: drop slowloris header stalls
   server.requestTimeout = 600000; // 10m: allow full streaming evaluation jobs
   server.keepAliveTimeout = 65000; // 65s: keep-alive matching Cloudflare edge defaults
+
+  // Initialize Push Notification Service
+  PushNotificationService.initialize();
 
   // Start periodic Job URLs background worker
   if (process.env.JOB_WORKER_ENABLED !== 'false') {

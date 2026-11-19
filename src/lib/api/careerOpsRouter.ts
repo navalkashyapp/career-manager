@@ -7,6 +7,7 @@ import { GEMINI_MODELS } from '../../config/gemini';
 
 import { COMMANDS as tracker } from '../../../career-ops/tracker.mjs';
 import { DataParserService } from '../services/DataParserService';
+import { PushNotificationService } from '../services/PushNotificationService';
 import path from 'path';
 import { z } from 'zod';
 import { execFile } from 'child_process';
@@ -781,5 +782,106 @@ careerOpsRouter.post('/prep-interview', async (req, res) => {
   } catch (error: any) {
     console.error('[prep-interview] Error:', error);
     res.status(500).json({ error: error.message || 'Failed to generate interview prep' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Push Notification Endpoints
+// ---------------------------------------------------------------------------
+
+/**
+ * Get Public VAPID Key for browser Web Push subscription
+ */
+careerOpsRouter.get('/notifications/vapid-key', (req, res) => {
+  try {
+    const vapidPublicKey = PushNotificationService.getPublicKey();
+    res.json({ vapidPublicKey });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Check subscription status for current user
+ */
+careerOpsRouter.get('/notifications/status', async (req, res) => {
+  try {
+    const userId = (req as any).user?.uid;
+    if (!userId) return res.status(401).json({ error: 'User ID missing' });
+
+    const status = await PushNotificationService.getSubscriptionStatus(userId);
+    res.json({
+      ...status,
+      vapidPublicKey: PushNotificationService.getPublicKey(),
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Register a web push subscription or FCM token
+ */
+careerOpsRouter.post('/notifications/subscribe', async (req, res) => {
+  try {
+    const userId = (req as any).user?.uid;
+    if (!userId) return res.status(401).json({ error: 'User ID missing' });
+
+    const { subscription, token, userAgent } = req.body || {};
+    const result = await PushNotificationService.registerSubscription(userId, {
+      subscription,
+      token,
+      userAgent: userAgent || (req.headers['user-agent'] as string),
+    });
+
+    res.json(result);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * Unregister a subscription or token
+ */
+careerOpsRouter.post('/notifications/unsubscribe', async (req, res) => {
+  try {
+    const userId = (req as any).user?.uid;
+    if (!userId) return res.status(401).json({ error: 'User ID missing' });
+
+    const { id, endpoint, token } = req.body || {};
+    const identifier = id || endpoint || token;
+    if (!identifier) {
+      return res.status(400).json({ error: 'id, endpoint, or token required' });
+    }
+
+    const success = await PushNotificationService.unregisterSubscription(userId, identifier);
+    res.json({ success });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Send an immediate test push notification to user's registered devices
+ */
+careerOpsRouter.post('/notifications/test', async (req, res) => {
+  try {
+    const userId = (req as any).user?.uid;
+    if (!userId) return res.status(401).json({ error: 'User ID missing' });
+
+    const { title, body } = req.body || {};
+    const result = await PushNotificationService.sendNotificationToUser(userId, {
+      title: title || '🧪 Test Notification',
+      body: body || 'Daily Job Import push notifications are successfully configured and working!',
+      url: '/',
+      data: {
+        type: 'TEST_NOTIFICATION',
+        timestamp: Date.now(),
+      },
+    });
+
+    res.json({ success: true, ...result });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 });

@@ -17,6 +17,9 @@ import {
   Server,
   Zap,
   Check,
+  Bell,
+  BellOff,
+  BellRing,
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
@@ -26,6 +29,7 @@ import { useData } from '../../../hooks/useData';
 import { useCareerOps } from '../../../hooks/useCareerOps';
 import { useUIStore } from '../../../store/useUIStore';
 import { apiUrl, apiFetch } from '../../../config/api';
+import { PushNotificationClient } from '../../../lib/services/PushNotificationClient';
 import type { JobUrlEntry, JobApplication } from '../../../types';
 
 interface JobUrlsModalProps {
@@ -62,6 +66,68 @@ export const JobUrlsModal: React.FC<JobUrlsModalProps> = ({ isOpen, onClose }) =
   const [isTriggeringServer, setIsTriggeringServer] = useState(false);
   const [serverMessage, setServerMessage] = useState<string | null>(null);
 
+  // Push notifications state
+  const [isPushSubscribed, setIsPushSubscribed] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+  const [pushStatusMessage, setPushStatusMessage] = useState<string | null>(null);
+
+  const checkPushSubscription = async () => {
+    if (!PushNotificationClient.isSupported()) return;
+    try {
+      const sub = await PushNotificationClient.getCurrentSubscription();
+      setIsPushSubscribed(!!sub);
+    } catch {
+      setIsPushSubscribed(false);
+    }
+  };
+
+  const handleTogglePush = async () => {
+    setPushLoading(true);
+    setPushStatusMessage(null);
+    try {
+      if (isPushSubscribed) {
+        const res = await PushNotificationClient.unsubscribe();
+        if (res.success) {
+          setIsPushSubscribed(false);
+          setPushStatusMessage('Daily job import push notifications disabled.');
+        } else {
+          setPushStatusMessage(res.error || 'Failed to disable notifications.');
+        }
+      } else {
+        const res = await PushNotificationClient.subscribe();
+        if (res.success) {
+          setIsPushSubscribed(true);
+          setPushStatusMessage(
+            'Daily job import notifications enabled! You will be notified when backend completes imports.',
+          );
+        } else {
+          setPushStatusMessage(res.error || 'Failed to enable push notifications.');
+        }
+      }
+    } catch (err: any) {
+      setPushStatusMessage(err.message || 'Error configuring notifications');
+    } finally {
+      setPushLoading(false);
+    }
+  };
+
+  const handleSendTestPush = async () => {
+    setPushLoading(true);
+    setPushStatusMessage(null);
+    try {
+      const res = await PushNotificationClient.sendTestNotification();
+      if (res.success) {
+        setPushStatusMessage('Test notification sent! Check your screen or notification tray.');
+      } else {
+        setPushStatusMessage(res.error || 'Failed to send test push notification.');
+      }
+    } catch (err: any) {
+      setPushStatusMessage(err.message || 'Failed to send test push notification.');
+    } finally {
+      setPushLoading(false);
+    }
+  };
+
   const fetchWorkerStatus = async () => {
     try {
       const res = await apiFetch(apiUrl('/api/career-ops/job-urls/status'));
@@ -77,6 +143,7 @@ export const JobUrlsModal: React.FC<JobUrlsModalProps> = ({ isOpen, onClose }) =
   useEffect(() => {
     if (isOpen) {
       fetchWorkerStatus();
+      checkPushSubscription();
       const interval = setInterval(fetchWorkerStatus, 15000);
       return () => clearInterval(interval);
     }
@@ -411,6 +478,92 @@ export const JobUrlsModal: React.FC<JobUrlsModalProps> = ({ isOpen, onClose }) =
               </Button>
             </div>
           </div>
+
+          {/* Daily Import Push Notifications Banner */}
+          <div className="bg-gradient-to-r from-blue-50/70 via-slate-50 to-indigo-50/50 dark:from-slate-900/90 dark:via-slate-900 dark:to-indigo-950/30 border border-blue-200/70 dark:border-blue-900/50 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start space-x-3">
+              <div
+                className={`p-2 rounded-lg mt-0.5 shrink-0 ${
+                  isPushSubscribed
+                    ? 'bg-blue-600/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400'
+                    : 'bg-slate-200 dark:bg-slate-800 text-slate-500'
+                }`}
+              >
+                {isPushSubscribed ? <BellRing size={18} /> : <BellOff size={18} />}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-slate-900 dark:text-white">
+                    Daily Import Push Notifications
+                  </span>
+                  {isPushSubscribed ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />{' '}
+                      Active
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+                      Disabled
+                    </span>
+                  )}
+                </div>
+                <p className="text-slate-600 dark:text-slate-300 text-xs mt-1">
+                  Get notified directly on your browser or device as soon as the daily job import
+                  queue completes.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {isPushSubscribed && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSendTestPush}
+                  disabled={pushLoading}
+                  className="bg-white dark:bg-[#1E293B] border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs h-8 gap-1.5"
+                >
+                  <Bell size={13} />
+                  <span>Send Test</span>
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant={isPushSubscribed ? 'outline' : 'default'}
+                size="sm"
+                onClick={handleTogglePush}
+                disabled={pushLoading}
+                className={
+                  isPushSubscribed
+                    ? 'border-rose-200 dark:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400 text-xs h-8'
+                    : 'bg-blue-600 hover:bg-blue-500 text-white text-xs h-8 gap-1.5'
+                }
+              >
+                {pushLoading ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : isPushSubscribed ? (
+                  <BellOff size={13} />
+                ) : (
+                  <Bell size={13} />
+                )}
+                <span>
+                  {pushLoading
+                    ? 'Updating...'
+                    : isPushSubscribed
+                      ? 'Turn Off'
+                      : 'Enable Daily Push'}
+                </span>
+              </Button>
+            </div>
+          </div>
+
+          {pushStatusMessage && (
+            <div className="flex items-start space-x-3 p-3 bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl text-blue-700 dark:text-blue-300 text-xs">
+              <CheckCircle2 size={16} className="shrink-0 mt-0.5" />
+              <div className="flex-1">{pushStatusMessage}</div>
+            </div>
+          )}
 
           {serverMessage && (
             <div className="flex items-start space-x-3 p-3 bg-indigo-50/80 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 rounded-xl text-indigo-700 dark:text-indigo-300 text-xs">
