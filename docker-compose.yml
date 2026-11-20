@@ -1,7 +1,6 @@
-version: '3.8'
-
 services:
   backend:
+    image: career-manager-backend:latest
     build:
       context: .
       dockerfile: Dockerfile
