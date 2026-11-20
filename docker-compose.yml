@@ -5,7 +5,9 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: career-manager-backend
-    restart: unless-stopped
+    restart: "no"
+    profiles:
+      - docker-backend
     ports:
       - "3000:3000"
     env_file:
@@ -31,7 +33,9 @@ services:
   ngrok:
     image: ngrok/ngrok:latest
     container_name: career-manager-ngrok
-    restart: unless-stopped
+    restart: "no"
+    profiles:
+      - docker-backend
     command:
       - "http"
       - "host.docker.internal:3000"
@@ -45,7 +49,9 @@ services:
   cloudflare:
     image: cloudflare/cloudflared:latest
     container_name: career-manager-cloudflare
-    restart: unless-stopped
+    restart: "no"
+    profiles:
+      - docker-backend
     command: tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     depends_on:
       backend:
