@@ -4,7 +4,6 @@ import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
-import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 import { GEMINI_MODELS } from './src/config/gemini';
 import { OrchestratorAgent } from './src/agents';
@@ -13,11 +12,10 @@ import { PdfGeneratorService } from './src/lib/services/PdfGeneratorService';
 import { LocalConnectorService } from './src/lib/services/LocalConnectorService';
 import { JobUrlWorkerService } from './src/lib/services/JobUrlWorkerService';
 import { PushNotificationService } from './src/lib/services/PushNotificationService';
-import { AgyCliService } from './src/lib/services/AgyCliService';
+import { LlmWorkerService } from './src/lib/services/LlmWorkerService';
 import * as fs from 'fs';
 import { z } from 'zod';
 import { careerOpsRouter } from './src/lib/api/careerOpsRouter';
-import { callGeminiApi } from './src/lib/utils/geminiClient';
 import { requireAuth } from './src/lib/middleware/auth';
 
 function safeParseJSON(text: string) {
@@ -57,10 +55,6 @@ const timeoutMiddleware = (
 };
 
 dotenv.config();
-
-const apiKey =
-  process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY_1 || process.env.GEMINI_API_KEY_2 || '';
-const ai = new GoogleGenAI({ apiKey });
 
 async function startServer() {
   const app = express();
@@ -229,14 +223,11 @@ Return the result as a JSON object with this structure:
   "missingKeywords": ["string", "string"]
 }
       `;
-      const response = await callGeminiApi({
+      const data = await LlmWorkerService.generateStructured<any>({
+        prompt,
         model: GEMINI_MODELS.FLASH,
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-        },
       });
-      res.json(safeParseJSON(response.text || ''));
+      res.json(data);
     } catch (error: any) {
       console.error(error);
       res.status(500).json({ error: error.message });
@@ -246,7 +237,7 @@ Return the result as a JSON object with this structure:
   app.post('/api/gemini/draft-outreach', async (req, res) => {
     try {
       const validated = JobPayloadSchema.parse(req.body);
-      const orchestrator = new OrchestratorAgent(ai, { debug: true });
+      const orchestrator = new OrchestratorAgent(undefined, { debug: true });
       const p = validated.profileData || {};
       const userProfile = {
         fullName: p.name || p.fullName || 'Candidate',
@@ -307,14 +298,11 @@ Return the result as a JSON object with this structure:
   "redFlags": ["string"]
 }
       `;
-      const response = await callGeminiApi({
+      const data = await LlmWorkerService.generateStructured<any>({
+        prompt,
         model: GEMINI_MODELS.FLASH,
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-        },
       });
-      res.json(safeParseJSON(response.text || ''));
+      res.json(data);
     } catch (error: any) {
       console.error(error);
       res.status(500).json({ error: error.message });
@@ -324,7 +312,7 @@ Return the result as a JSON object with this structure:
   app.post('/api/gemini/prep-interview', async (req, res) => {
     try {
       const { jdText, companyName, profileData } = req.body;
-      const orchestrator = new OrchestratorAgent(ai, { debug: true });
+      const orchestrator = new OrchestratorAgent(undefined, { debug: true });
       const p = profileData || {};
       const userProfile = {
         fullName: p.name || p.fullName || 'Candidate',
@@ -409,14 +397,11 @@ Summarize the thread into key action items for the candidate. Return the result 
   "actionItems": ["string"]
 }
       `;
-      const response = await callGeminiApi({
+      const data = await LlmWorkerService.generateStructured<any>({
+        prompt,
         model: GEMINI_MODELS.FLASH,
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-        },
       });
-      res.json(safeParseJSON(response.text || ''));
+      res.json(data);
     } catch (error: any) {
       console.error(error);
       res.status(500).json({ error: error.message });
@@ -429,7 +414,7 @@ Summarize the thread into key action items for the candidate. Return the result 
       if (process.env.DEBUG === 'true') {
         console.log('\n=== AGY PROXY REQUEST ===\n', prompt, '\n=========================\n');
       }
-      const text = await AgyCliService.executePrompt(prompt);
+      const text = await LlmWorkerService.generateText({ prompt, forceAntigravity: true });
       if (process.env.DEBUG === 'true') {
         console.log('\n=== AGY PROXY RESPONSE ===\n', text, '\n==========================\n');
       }
@@ -443,7 +428,7 @@ Summarize the thread into key action items for the candidate. Return the result 
   app.post('/api/gemini/career-ops', async (req, res) => {
     try {
       const { action } = req.body;
-      const orchestrator = new OrchestratorAgent(ai, { debug: true });
+      const orchestrator = new OrchestratorAgent(undefined, { debug: true });
 
       const result = await orchestrator.handleAction(action, req.body);
       res.json(result);
@@ -484,7 +469,7 @@ Summarize the thread into key action items for the candidate. Return the result 
       }
 
       // Start in background so we don't block the request
-      LocalConnectorService.runAutomatedSearch(keywords, profileData, ai).catch((err) => {
+      LocalConnectorService.runAutomatedSearch(keywords, profileData).catch((err) => {
         console.error('LocalConnectorService background error:', err);
       });
 
@@ -555,15 +540,12 @@ Summarize the thread into key action items for the candidate. Return the result 
       Raw LinkedIn Data: ${linkedinData}
       `;
 
-      const response = await callGeminiApi({
+      const data = await LlmWorkerService.generateStructured<any>({
+        prompt,
         model: GEMINI_MODELS.PRO,
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-        },
       });
 
-      res.json(safeParseJSON(response.text || ''));
+      res.json(data);
     } catch (error: any) {
       console.error(error);
       res.status(500).json({ error: error.message });
@@ -587,12 +569,12 @@ Summarize the thread into key action items for the candidate. Return the result 
       Provide helpful, real-time advice based on their profile and applications.
       `;
 
-      const response = await callGeminiApi({
+      const reply = await LlmWorkerService.generateText({
+        prompt,
         model: GEMINI_MODELS.PRO,
-        contents: prompt,
       });
 
-      res.json({ reply: response.text });
+      res.json({ reply });
     } catch (error: any) {
       console.error(error);
       res.status(500).json({ error: error.message });
@@ -609,12 +591,12 @@ Summarize the thread into key action items for the candidate. Return the result 
       
       Provide a brief summary of the key takeaways and current state of the user's career coaching session.`;
 
-      const response = await callGeminiApi({
+      const summaryText = await LlmWorkerService.generateText({
+        prompt,
         model: GEMINI_MODELS.PRO,
-        contents: prompt,
       });
 
-      res.json({ summary: response.text });
+      res.json({ summary: summaryText });
     } catch (error: any) {
       console.error(error);
       res.status(500).json({ error: error.message });

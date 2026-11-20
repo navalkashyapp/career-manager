@@ -1,3 +1,6 @@
+import * as fs from 'fs';
+import { execFile, execSync } from 'child_process';
+
 export class AgyCliService {
   private static resolvedAgyPath: string | null = null;
   private static cachedIsAvailable: boolean | null = null;
@@ -18,25 +21,8 @@ export class AgyCliService {
       return this.resolvedAgyPath;
     }
 
-    try {
-      const fs = await import(/* @vite-ignore */ 'fs');
-      const candidatePaths = [
-        process.env.HOME ? `${process.env.HOME}/.local/bin/agy` : '',
-        '/usr/local/bin/agy',
-        '/usr/bin/agy',
-      ].filter(Boolean) as string[];
-
-      for (const p of candidatePaths) {
-        if (fs.existsSync(p)) {
-          this.resolvedAgyPath = p;
-          this.cachedIsAvailable = true;
-          return this.resolvedAgyPath;
-        }
-      }
-    } catch {}
-
-    this.resolvedAgyPath = 'agy';
-    return this.resolvedAgyPath;
+    this.isAvailable();
+    return this.resolvedAgyPath || 'agy';
   }
 
   /**
@@ -52,6 +38,7 @@ export class AgyCliService {
     }
 
     if (process.env?.AGY_BIN_PATH) {
+      this.resolvedAgyPath = process.env.AGY_BIN_PATH;
       this.cachedIsAvailable = true;
       return true;
     }
@@ -63,21 +50,25 @@ export class AgyCliService {
         '/usr/bin/agy',
       ].filter(Boolean) as string[];
 
-      const fs = (globalThis as any).process?.versions?.node
-        ? typeof require !== 'undefined'
-          ? require('fs')
-          : null
-        : null;
-
-      if (fs) {
-        for (const p of candidatePaths) {
-          if (fs.existsSync(p)) {
-            this.resolvedAgyPath = p;
-            this.cachedIsAvailable = true;
-            return true;
-          }
+      for (const p of candidatePaths) {
+        if (fs.existsSync(p)) {
+          this.resolvedAgyPath = p;
+          this.cachedIsAvailable = true;
+          return true;
         }
       }
+
+      try {
+        const whichOut = execSync('which agy', {
+          encoding: 'utf-8',
+          stdio: ['pipe', 'pipe', 'ignore'],
+        }).trim();
+        if (whichOut && fs.existsSync(whichOut)) {
+          this.resolvedAgyPath = whichOut;
+          this.cachedIsAvailable = true;
+          return true;
+        }
+      } catch {}
     } catch {}
 
     this.cachedIsAvailable = this.resolvedAgyPath !== null;

@@ -11,7 +11,7 @@ export class LocalConnectorService {
   public static async runAutomatedSearch(
     keywords: string,
     profileData: UserProfile,
-    ai: any,
+    ai?: any,
   ): Promise<void> {
     console.log(`[Connector] Starting automated job search for: ${keywords}`);
     const browser = await chromium.launch({

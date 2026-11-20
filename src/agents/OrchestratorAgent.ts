@@ -1,4 +1,3 @@
-import { GoogleGenAI } from '@google/genai';
 import { JobEvaluationAgent, JobEvaluation } from './JobEvaluationAgent';
 import { ResumeTailorAgent, UserProfile, TailorResult } from './ResumeTailorAgent';
 import { PortalExtractionAgent, JobPostingMetadata } from './PortalExtractionAgent';
@@ -110,7 +109,7 @@ export class OrchestratorAgent {
   private outreach: OutreachAgent;
   private batchConcurrency: number;
 
-  constructor(aiClient: GoogleGenAI, config: OrchestratorConfig = {}) {
+  constructor(aiClient?: any, config: OrchestratorConfig = {}) {
     const models = config.models ?? {};
     const agentFallbackModels = config.agentFallbackModels ?? {};
     const baseFallback = config.fallbackModels;

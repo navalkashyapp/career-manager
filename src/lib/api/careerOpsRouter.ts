@@ -1,6 +1,5 @@
 import express from 'express';
 import { adminDb } from '../firebaseAdmin';
-import { GoogleGenAI } from '@google/genai';
 import { OrchestratorAgent, JobEvaluation, TailorResult } from '../../agents/OrchestratorAgent';
 import { UserProfile } from '../../agents/ResumeTailorAgent';
 import { GEMINI_MODELS } from '../../config/gemini';
@@ -114,13 +113,7 @@ careerOpsRouter.post('/tracker/update', async (req, res) => {
 // ---------------------------------------------------------------------------
 // Helper functions for Agents V2 Orchestration
 function getOrchestrator(): OrchestratorAgent {
-  const apiKey =
-    process.env.GEMINI_API_KEY ||
-    process.env.GEMINI_API_KEY_1 ||
-    process.env.GEMINI_API_KEY_2 ||
-    '';
-  const aiClient = new GoogleGenAI({ apiKey });
-  return new OrchestratorAgent(aiClient, { debug: true });
+  return new OrchestratorAgent(undefined, { debug: true });
 }
 
 function extractCandidateData(profileData: any): {

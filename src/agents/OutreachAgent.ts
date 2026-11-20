@@ -2,7 +2,7 @@ import { BaseAgent } from './BaseAgent';
 import { Type, Schema } from '@google/genai';
 import { UserProfile } from './ResumeTailorAgent';
 import { GEMINI_MODELS } from '../config/gemini';
-import { callGeminiApi } from '../lib/utils/geminiClient';
+import { LlmWorkerService } from '../lib/services/LlmWorkerService';
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -240,24 +240,25 @@ ${jdText}
     `;
 
     console.log(
-      '\n=== GEMINI REQUEST (Extract Job) ===\n',
+      '\n=== LLM WORKER REQUEST (Extract Job) ===\n',
       extractPrompt,
-      '\n=================================\n',
+      '\n======================================\n',
     );
-    const extractedJdResponse = await callGeminiApi({
+    const extractedText = await LlmWorkerService.generateText({
+      prompt: extractPrompt,
       model: GEMINI_MODELS.FLASH,
-      contents: extractPrompt,
-      config: { maxOutputTokens: 8192 },
-      maxTimeoutMs: 120000,
+      maxOutputTokens: 8192,
+      timeoutMs: 120000,
       onRetry,
+      useLocalCli: this.useLocalCli,
     });
 
     console.log(
-      '\n=== GEMINI RESPONSE (Extract Job) ===\n',
-      extractedJdResponse.text,
-      '\n==================================\n',
+      '\n=== LLM WORKER RESPONSE (Extract Job) ===\n',
+      extractedText,
+      '\n=======================================\n',
     );
-    return extractedJdResponse.text;
+    return extractedText;
   }
 
   public async generateMessage(
@@ -301,34 +302,21 @@ Return the result as a JSON object with this structure:
     `.trim();
 
     console.log(
-      '\n=== GEMINI REQUEST (Generate Message) ===\n',
+      '\n=== LLM WORKER REQUEST (Generate Message) ===\n',
       prompt,
-      '\n====================================\n',
+      '\n=========================================\n',
     );
-    const response = await callGeminiApi({
+    return LlmWorkerService.generateStructured<{
+      subject: string;
+      body: string;
+      suggestions: string;
+    }>({
+      prompt,
       model: GEMINI_MODELS.FLASH,
-      contents: prompt,
-      config: { responseMimeType: 'application/json' },
-      maxTimeoutMs: 600000,
+      timeoutMs: 120000,
       onRetry,
+      useLocalCli: this.useLocalCli,
     });
-
-    console.log(
-      '\n=== GEMINI RESPONSE (Generate Message) ===\n',
-      response.text,
-      '\n=====================================\n',
-    );
-    const rawText = response.text || '{}';
-    let cleaned = rawText
-      .replace(/^\s*```(?:json)?\s*/i, '')
-      .replace(/\s*```\s*$/i, '')
-      .trim();
-    let extracted = this.extractJsonObject(cleaned);
-    try {
-      return JSON.parse(extracted || cleaned);
-    } catch (e) {
-      return JSON.parse(cleaned); // let it throw the real error
-    }
   }
 
   public async draft(
