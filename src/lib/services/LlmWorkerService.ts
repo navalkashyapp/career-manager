@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { AgyCliService } from './AgyCliService';
+import { GeminiKeyService } from './GeminiKeyService';
 import { withExponentialBackoff } from '../utils/withExponentialBackoff';
 import { GEMINI_MODELS, getFallbackModels } from '../../config/gemini';
 
@@ -17,6 +18,7 @@ export interface LlmCallOptions {
   useLocalCli?: boolean;
   forceAntigravity?: boolean;
   forceGemini?: boolean;
+  userId?: string;
 }
 
 export interface LlmResponse {
@@ -132,17 +134,13 @@ export class LlmWorkerService {
     }
     console.log('='.repeat(60));
 
-    const apiKeys = [
-      process.env.GEMINI_API_KEY_1,
-      process.env.GEMINI_API_KEY_2,
-      process.env.GEMINI_API_KEY,
-    ].filter(Boolean) as string[];
+    const apiKeys = await GeminiKeyService.getApiKeys(options.userId);
 
     if (apiKeys.length === 0) {
       // If no Gemini API keys exist, attempt emergency Antigravity if available
       if (AgyCliService.isAvailable() && !preferAntigravity) {
         console.warn(
-          '[LlmWorker] No Gemini API key found. Attempting emergency fallback to Antigravity CLI...',
+          '[LlmWorker] No Gemini API key found in Firestore. Attempting emergency fallback to Antigravity CLI...',
         );
         const rawText = await AgyCliService.executePrompt(fullPrompt, schema, {
           timeoutMs,
@@ -151,7 +149,7 @@ export class LlmWorkerService {
         return { text: rawText, provider: 'antigravity', modelUsed: 'agy-cli-emergency' };
       }
       throw new Error(
-        'No Gemini API key provided in environment variables and Antigravity CLI is unavailable.',
+        'No Gemini API key found in Firestore (or fallback environment) and Antigravity CLI is unavailable.',
       );
     }
 

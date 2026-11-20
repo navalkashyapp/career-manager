@@ -301,6 +301,17 @@ graph TD
   - Browser Service Worker (`sw.js`) intercepts push events and shows system desktop notifications.
   - Backend automated trigger sends daily summary alerts when background URL crawler completes ingesting new jobs.
 
+### 3.13 User Secrets & Gemini Key Management Subsystem
+- **Primary Source Files**: `src/lib/services/GeminiKeyService.ts`, `src/components/settings/GeminiKeysModal.tsx`, `src/components/layout/Layout.tsx`, `src/features/profile/components/ProfileView.tsx`, `server.ts` (`/api/gemini/keys`).
+- **User Actions & System Architecture**:
+  - In-portal API key management allowing users to input and configure custom Google Gemini API keys directly from the web interface without touching environment files or restarting server instances.
+  - Multi-tiered key resolution: Authenticated user Firestore secret (`users/{userId}/secrets/gemini`) > Server Environment (`GEMINI_API_KEY`) > Fallback keys.
+  - Live API key verification pinging `@google/genai` (`gemini-3.8-flash`) before persisting, with robust handling for quota exhaustion status codes.
+  - In-memory process caching with zero-latency synchronization across `LlmWorkerService` and backend agents.
+  - Secure metadata sanitization (`getKeyMetadata`) ensuring raw plaintext keys are never returned over HTTP; UI renders masked keys (`AIzaSy...****`) and configuration source badges.
+  - One-click reversion to system environment defaults (`DELETE /api/gemini/keys`).
+  - Accessible from the global navigation sidebar footer and the Career Profile view.
+
 ---
 
 ## 4. End-to-End Code Flow Traces
@@ -574,9 +585,10 @@ gantt
 1. **Deconstruct `JobDetailsModal.tsx`** [RESOLVED]: Decomposed the 1,641-line monolith into 5 modular sub-components in `src/features/kanban/components/job-details/` (`JobDescriptionTab`, `JobNotesTab`, `JobResumeTab`, `JobInterviewPrepTab`, `JobOutreachTab`), reducing `JobDetailsModal.tsx` to 314 lines.
 2. **Move `OutreachAgent` to Backend** [RESOLVED]: Removed client-side `OutreachAgent` instantiation from the browser. Client now calls the authenticated backend route `/api/career-ops/draft-outreach`, eliminating browser-external shims for Node.js modules.
 3. **Unify Data Sources** [RESOLVED]: Rewrote `PerformanceView.tsx` and `usePerformanceMetrics.ts` to compute funnel metrics and stage durations directly from live Cloud Firestore data via `useData()`, completely retiring local markdown tracker sync and deleting `getApplications.ts`.
-4. **Fix Unicode Email Crashes**: Implement UTF-8 safe base64url encoding/decoding in `useGmail.ts` and `Inbox.tsx`.
-5. **Fix Profile Overwrite Bug**: Update `linkedinImportService.ts` to accept `targetProfileId` and update the active profile rather than defaulting to root.
-6. **Fix JobUrlsModal "View Job" Bug**: In `JobUrlsModal.tsx`, assign application IDs from Firestore's returned document ID instead of ephemeral `app-Date.now()`.
+4. **Web Portal Gemini Key Management** [RESOLVED]: Created `GeminiKeyService` and web UI (`GeminiKeysModal.tsx`) allowing users to securely manage, live-verify, rotate, or delete custom Gemini API keys stored in Firestore under `users/{userId}/secrets/gemini` with zero-restart in-memory cache propagation to all downstream LLM agent workloads.
+5. **Fix Unicode Email Crashes**: Implement UTF-8 safe base64url encoding/decoding in `useGmail.ts` and `Inbox.tsx`.
+6. **Fix Profile Overwrite Bug**: Update `linkedinImportService.ts` to accept `targetProfileId` and update the active profile rather than defaulting to root.
+7. **Fix JobUrlsModal "View Job" Bug**: In `JobUrlsModal.tsx`, assign application IDs from Firestore's returned document ID instead of ephemeral `app-Date.now()`.
 
 ### Phase 3: Performance, Bundle Optimization, & Worker Scalability (Medium Priority)
 1. **Headless Browser Pooling**: Replace per-request `chromium.launch()` with a shared `BrowserPool` across `JobScraperService` and `PdfGeneratorService`.

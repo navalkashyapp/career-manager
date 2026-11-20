@@ -1,14 +1,25 @@
 import React, { useState } from 'react';
 import { useData } from '../../../hooks/useData';
-import { Briefcase, MapPin, Building2, Terminal, ShieldAlert, Linkedin, Globe } from 'lucide-react';
+import {
+  Briefcase,
+  MapPin,
+  Building2,
+  Terminal,
+  ShieldAlert,
+  Linkedin,
+  Globe,
+  KeyRound,
+  Plus,
+  Trash2,
+} from 'lucide-react';
 import { motion } from 'motion/react';
 import ImportLinkedInModal from './ImportLinkedInModal';
 import EditProfileModal from './EditProfileModal';
+import GeminiKeysModal from '../../../components/settings/GeminiKeysModal';
 import { Button } from '../../../components/ui/button';
 import { Card as ShadcnCard } from '../../../components/ui/card';
 import { Badge } from '../../../components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '../../../components/ui/tabs';
-import { Plus, Trash2 } from 'lucide-react';
 import { apiUrl, apiFetch } from '../../../config/api';
 
 export default function ProfileView() {
@@ -25,6 +36,7 @@ export default function ProfileView() {
   } = useData();
   const [isLinkedInModalOpen, setIsLinkedInModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isGeminiKeysOpen, setIsGeminiKeysOpen] = useState(false);
 
   const handleAddProfile = async () => {
     const newName = prompt('Enter a name for the new profile (e.g., Frontend Profile):');
@@ -149,6 +161,14 @@ export default function ProfileView() {
             <Linkedin size={16} className="mr-2" />
             Import LinkedIn
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => setIsGeminiKeysOpen(true)}
+            className="text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 border-transparent hover:border-transparent"
+          >
+            <KeyRound size={16} className="mr-2" />
+            Gemini Keys
+          </Button>
           <Button variant="outline" onClick={() => setIsEditModalOpen(true)}>
             Edit Profile
           </Button>
@@ -233,6 +253,25 @@ export default function ProfileView() {
         </div>
 
         <div className="space-y-6">
+          <ShadcnCard className="p-6 bg-white/50 dark:bg-[#1E293B]/50 backdrop-blur-md border border-indigo-500/20 shadow-sm">
+            <h2 className="text-xl font-medium text-slate-900 dark:text-white mb-2 flex items-center space-x-2">
+              <KeyRound size={20} className="text-indigo-400" />
+              <span>Gemini API Keys</span>
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 leading-relaxed">
+              Configure personal Gemini API keys stored in your private Firestore secrets to power
+              ATS evaluation, resume tailoring, and multi-agent operations.
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => setIsGeminiKeysOpen(true)}
+              className="w-full text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 border-indigo-200 dark:border-indigo-800/60 flex items-center justify-center gap-2"
+            >
+              <KeyRound size={14} />
+              Manage Gemini API Keys
+            </Button>
+          </ShadcnCard>
+
           <ShadcnCard className="p-6 bg-white/50 dark:bg-[#1E293B]/50 backdrop-blur-md">
             <h2 className="text-xl font-medium text-slate-900 dark:text-white mb-6 flex items-center space-x-2">
               <Terminal size={20} className="text-pink-400" />
@@ -324,6 +363,7 @@ export default function ProfileView() {
         profile={profile}
         onSave={updateProfile}
       />
+      <GeminiKeysModal isOpen={isGeminiKeysOpen} onClose={() => setIsGeminiKeysOpen(false)} />
     </div>
   );
 }

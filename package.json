@@ -13,6 +13,7 @@
     "ngrok": "ngrok http 3000 --url=uncolored-enzyme-unsightly.ngrok-free.dev",
     "lint": "tsc --noEmit",
     "test": "vitest run src/lib/tests",
+    "keys:manage": "tsx scripts/updateGeminiKeys.ts",
     "prepare": "husky"
   },
   "dependencies": {

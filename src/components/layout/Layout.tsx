@@ -16,6 +16,7 @@ import {
   X,
   PanelLeftClose,
   PanelLeftOpen,
+  KeyRound,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
@@ -23,6 +24,7 @@ import { initAuth, googleSignIn, logout } from '../../store/firebase';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useBackendStatus } from '../../hooks/useBackendStatus';
 import CareerCoach from '../chat/CareerCoach';
+import GeminiKeysModal from '../settings/GeminiKeysModal';
 import { Button } from '../ui/button';
 
 const navItems = [
@@ -40,6 +42,7 @@ export default function Layout() {
   const [needsAuth, setNeedsAuth] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isGeminiKeysModalOpen, setIsGeminiKeysModalOpen] = useState(false);
   const [isSidebarMinimized, setIsSidebarMinimized] = useState(() => {
     try {
       return localStorage.getItem('sidebar_minimized') === 'true';
@@ -352,6 +355,25 @@ export default function Layout() {
           <Button
             variant="ghost"
             onClick={() => {
+              setIsGeminiKeysModalOpen(true);
+              setIsMobileMenuOpen(false);
+            }}
+            title="Gemini API Key Settings"
+            className={cn(
+              'flex items-center rounded-xl text-sm font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-[#1E293B] hover:text-slate-900 dark:hover:text-white transition-colors',
+              isSidebarMinimized
+                ? 'md:justify-center md:px-0 md:py-2.5 md:w-10 md:h-10 md:mx-auto w-full justify-start space-x-3 px-3 py-2.5'
+                : 'w-full justify-start space-x-3 px-3 py-2.5',
+            )}
+          >
+            <KeyRound size={18} className="shrink-0 text-indigo-400" />
+            <span className={cn('truncate', isSidebarMinimized && 'md:hidden')}>
+              Gemini API Keys
+            </span>
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => {
               toggleTheme();
               setIsMobileMenuOpen(false);
             }}
@@ -396,6 +418,10 @@ export default function Layout() {
       </main>
 
       <CareerCoach />
+      <GeminiKeysModal
+        isOpen={isGeminiKeysModalOpen}
+        onClose={() => setIsGeminiKeysModalOpen(false)}
+      />
     </div>
   );
 }

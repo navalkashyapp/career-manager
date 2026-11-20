@@ -13,6 +13,7 @@ import { LocalConnectorService } from './src/lib/services/LocalConnectorService'
 import { JobUrlWorkerService } from './src/lib/services/JobUrlWorkerService';
 import { PushNotificationService } from './src/lib/services/PushNotificationService';
 import { LlmWorkerService } from './src/lib/services/LlmWorkerService';
+import { GeminiKeyService } from './src/lib/services/GeminiKeyService';
 import * as fs from 'fs';
 import { z } from 'zod';
 import { careerOpsRouter } from './src/lib/api/careerOpsRouter';
@@ -204,6 +205,87 @@ async function startServer() {
   });
 
   // API Routes
+  app.get('/api/gemini/keys', async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const uid = user?.uid || GeminiKeyService.DEFAULT_USER_ID;
+      const metadata = await GeminiKeyService.getKeyMetadata(uid);
+      res.json(metadata);
+    } catch (error: any) {
+      console.error('[GeminiKeys] Error fetching keys:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/gemini/keys', async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const uid = user?.uid || GeminiKeyService.DEFAULT_USER_ID;
+      const { apiKeys, validate = true } = req.body;
+      if (!Array.isArray(apiKeys) || apiKeys.length === 0) {
+        return res.status(400).json({ error: 'apiKeys must be a non-empty array of strings.' });
+      }
+
+      const validKeys = apiKeys
+        .map((k: any) => (typeof k === 'string' ? k.trim() : ''))
+        .filter((k: string) => k.length > 0);
+
+      if (validKeys.length === 0) {
+        return res.status(400).json({ error: 'At least one non-empty API key must be provided.' });
+      }
+
+      if (validate) {
+        const verifyResult = await GeminiKeyService.verifyKey(validKeys[0]);
+        if (!verifyResult.valid) {
+          return res.status(400).json({
+            error: `Primary API key verification failed: ${verifyResult.error}`,
+          });
+        }
+      }
+
+      await GeminiKeyService.setApiKeys(uid, validKeys);
+      const metadata = await GeminiKeyService.getKeyMetadata(uid);
+      res.json({
+        success: true,
+        message: 'Gemini API keys updated successfully in Firestore.',
+        ...metadata,
+      });
+    } catch (error: any) {
+      console.error('[GeminiKeys] Error saving keys:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/gemini/keys/verify', async (req, res) => {
+    try {
+      const { apiKey } = req.body;
+      if (!apiKey || typeof apiKey !== 'string') {
+        return res.status(400).json({ valid: false, error: 'apiKey is required.' });
+      }
+      const result = await GeminiKeyService.verifyKey(apiKey);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ valid: false, error: error.message });
+    }
+  });
+
+  app.delete('/api/gemini/keys', async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const uid = user?.uid || GeminiKeyService.DEFAULT_USER_ID;
+      await GeminiKeyService.deleteApiKeys(uid);
+      const metadata = await GeminiKeyService.getKeyMetadata(uid);
+      res.json({
+        success: true,
+        message: 'Custom Gemini API keys removed. Reverted to environment defaults.',
+        ...metadata,
+      });
+    } catch (error: any) {
+      console.error('[GeminiKeys] Error deleting keys:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post('/api/gemini/tailor-resume', async (req, res) => {
     try {
       const { jdText, profileData } = req.body;
